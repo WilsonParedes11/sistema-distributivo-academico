@@ -16,6 +16,7 @@ return new class extends Migration {
             $table->date('fecha_vinculacion');
             $table->boolean('activo')->default(true);
             $table->timestamps();
+            $table->softDeletes();
 
             // Índices
             $table->index('grado_ocupacional');

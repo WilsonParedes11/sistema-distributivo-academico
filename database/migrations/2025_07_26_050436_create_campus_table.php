@@ -15,6 +15,7 @@ return new class extends Migration {
             $table->string('telefono')->nullable();
             $table->boolean('activo')->default(true);
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

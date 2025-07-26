@@ -28,6 +28,7 @@ return new class extends Migration {
             $table->text('observaciones')->nullable();
             $table->boolean('activo')->default(true);
             $table->timestamps();
+            $table->softDeletes();
 
             // Índice único para evitar duplicados
             $table->unique([

@@ -19,6 +19,7 @@ return new class extends Migration {
             $table->date('fecha_ingreso');
             $table->enum('estado', ['activo', 'inactivo', 'graduado', 'retirado'])->default('activo');
             $table->timestamps();
+            $table->softDeletes();
 
             // Índices
             $table->index(['carrera_id', 'semestre_actual', 'paralelo']);

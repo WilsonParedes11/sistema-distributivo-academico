@@ -18,6 +18,7 @@ return new class extends Migration {
             $table->json('recursos_disponibles')->nullable(); // proyector, computadoras, etc.
             $table->boolean('activa')->default(true);
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

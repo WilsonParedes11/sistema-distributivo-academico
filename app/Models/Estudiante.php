@@ -91,7 +91,7 @@ class Estudiante extends Model
         return $this->fecha_ingreso->diffInMonths(now());
     }
 
-    public function getTiempoEstudiosAñosAttribute()
+    public function getTiempoEstudiosAniosAttribute()
     {
         return $this->fecha_ingreso->diffInYears(now());
     }
@@ -238,19 +238,19 @@ class Estudiante extends Model
 
     public function generarCodigoEstudiante()
     {
-        $año = $this->fecha_ingreso->format('Y');
+        $anio = $this->fecha_ingreso->format('Y');
         $carrera = $this->carrera->codigo;
         $correlativo = str_pad($this->id, 4, '0', STR_PAD_LEFT);
 
-        return $año . $carrera . $correlativo;
+        return $anio . $carrera . $correlativo;
     }
 
-    public static function siguienteCodigoEstudiante($carreraId, $año = null)
+    public static function siguienteCodigoEstudiante($carreraId, $anio = null)
     {
-        $año = $año ?? now()->year;
+        $anio = $anio ?? now()->year;
         $carrera = Carrera::find($carreraId);
 
-        $ultimo = static::where('codigo_estudiante', 'LIKE', $año . $carrera->codigo . '%')
+        $ultimo = static::where('codigo_estudiante', 'LIKE', $anio . $carrera->codigo . '%')
             ->orderBy('codigo_estudiante', 'desc')
             ->first();
 
@@ -260,6 +260,6 @@ class Estudiante extends Model
             $numero = 1;
         }
 
-        return $año . $carrera->codigo . str_pad($numero, 4, '0', STR_PAD_LEFT);
+        return $anio . $carrera->codigo . str_pad($numero, 4, '0', STR_PAD_LEFT);
     }
 }

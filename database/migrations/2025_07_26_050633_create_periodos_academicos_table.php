@@ -10,7 +10,7 @@ return new class extends Migration {
         Schema::create('periodos_academicos', function (Blueprint $table) {
             $table->id();
             $table->string('nombre'); // Ej: 2025-I
-            $table->integer('año');
+            $table->integer('anio');
             $table->enum('periodo', ['I', 'II']);
             $table->date('fecha_inicio');
             $table->date('fecha_fin');

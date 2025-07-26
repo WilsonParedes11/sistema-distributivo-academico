@@ -13,7 +13,7 @@ class PeriodoAcademico extends Model
 
     protected $fillable = [
         'nombre',
-        'año',
+        'anio',
         'periodo',
         'fecha_inicio',
         'fecha_fin',
@@ -22,7 +22,7 @@ class PeriodoAcademico extends Model
 
     protected $casts = [
         'activo' => 'boolean',
-        'año' => 'integer',
+        'anio' => 'integer',
         'fecha_inicio' => 'date',
         'fecha_fin' => 'date',
     ];
@@ -49,9 +49,9 @@ class PeriodoAcademico extends Model
         return $query->where('activo', true);
     }
 
-    public function scopePorAño($query, $año)
+    public function scopePorAnio($query, $anio)
     {
-        return $query->where('año', $año);
+        return $query->where('anio', $anio);
     }
 
     public function scopePorPeriodo($query, $periodo)

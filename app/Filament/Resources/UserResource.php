@@ -17,7 +17,9 @@ class UserResource extends Resource
 {
     protected static ?string $model = User::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-user';
+
+    protected static ?string $pluralLabel = 'Usuarios';
 
     public static function form(Form $form): Form
     {
@@ -48,8 +50,8 @@ class UserResource extends Resource
                     ->password()
                     ->required()
                     ->maxLength(255)
-                    ->dehydrateStateUsing(fn ($state) => bcrypt($state))
-                    ->dehydrated(fn ($state) => filled($state))
+                    ->dehydrateStateUsing(fn($state) => bcrypt($state))
+                    ->dehydrated(fn($state) => filled($state))
                     ->label('Contraseña'),
                 Forms\Components\Select::make('tipo_usuario')
                     ->required()

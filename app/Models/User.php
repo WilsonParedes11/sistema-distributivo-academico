@@ -18,9 +18,14 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
-        'name',
+        'cedula',
+        'nombres',
+        'apellidos',
         'email',
         'password',
+        'tipo_usuario',
+        'telefono',
+        'activo',
     ];
 
     /**
@@ -34,6 +39,16 @@ class User extends Authenticatable
     ];
 
     /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array
+     */
+    protected $appends = [
+        'name',
+        'full_name',
+    ];
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -44,5 +59,30 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Get the user's name for Filament compatibility.
+     * Filament expects a 'name' field but we use 'nombres'.
+     */
+    public function getNameAttribute(): string
+    {
+        return $this->nombres ?? '';
+    }
+
+    /**
+     * Get the user's full name.
+     */
+    public function getFullNameAttribute(): string
+    {
+        return ($this->nombres ?? '') . ' ' . ($this->apellidos ?? '');
+    }
+
+    /**
+     * Filament compatibility method for getting user name
+     */
+    public function getFilamentName(): string
+    {
+        return $this->nombres ?? $this->email ?? 'Usuario';
     }
 }

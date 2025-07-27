@@ -26,7 +26,7 @@ class DocenteResource extends Resource
             ->schema([
                 Forms\Components\Select::make('user_id')
                     ->label('Usuario')
-                    ->options(User::all()->mapWithKeys(function ($user) {
+                    ->options(User::where('tipo_usuario', 'docente')->get()->mapWithKeys(function ($user) {
                         return [$user->id => $user->nombres . ' ' . $user->apellidos];
                     }))
                     ->searchable(['nombres', 'apellidos', 'cedula'])

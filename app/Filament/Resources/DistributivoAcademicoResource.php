@@ -98,7 +98,6 @@ class DistributivoAcademicoResource extends Resource
                     ->maxLength(255)
                     ->default(null),
                 Forms\Components\TextInput::make('horas_direccion_academica_semanal')
-                    ->required()
                     ->numeric()
                     ->default(0),
                 Forms\Components\TextInput::make('detalle_horas_direccion')

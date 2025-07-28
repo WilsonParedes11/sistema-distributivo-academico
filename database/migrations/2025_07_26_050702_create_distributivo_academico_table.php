@@ -22,7 +22,7 @@ return new class extends Migration {
             $table->integer('horas_actividades_docencia');
             $table->integer('horas_investigacion_semanal')->default(0);
             $table->string('nombre_proyecto_investigacion')->nullable();
-            $table->integer('horas_direccion_academica_semanal')->default(0);
+            $table->integer('horas_direccion_academica_semanal')->default(0)->nullable();
             $table->string('detalle_horas_direccion')->nullable();
             $table->integer('total_horas_semanales');
             $table->text('observaciones')->nullable();

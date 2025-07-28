@@ -36,8 +36,8 @@ class DistributivoAcademicoResource extends Resource
                     ->required(),
                 Forms\Components\Select::make('docente_id')
                     ->label('Docente')
-                    ->options(User::where('tipo_usuario', 'docente')->get()->mapWithKeys(function ($user) {
-                        return [$user->id => $user->nombres . ' ' . $user->apellidos];
+                    ->options(\App\Models\Docente::all()->mapWithKeys(function ($docente) {
+                        return [$docente->id => $docente->nombres . ' ' . $docente->apellidos];
                     }))
                     ->searchable(['nombres', 'apellidos', 'cedula'])
                     ->preload()

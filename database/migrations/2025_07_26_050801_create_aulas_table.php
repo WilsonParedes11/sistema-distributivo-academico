@@ -12,6 +12,7 @@ return new class extends Migration {
             $table->string('nombre');
             $table->string('codigo')->unique();
             $table->foreignId('campus_id')->constrained('campus');
+            $table->foreignId('carrera_id')->nullable()->constrained('carreras');
             $table->string('edificio')->nullable();
             $table->integer('capacidad');
             $table->enum('tipo', ['aula', 'laboratorio', 'taller', 'auditorio']);

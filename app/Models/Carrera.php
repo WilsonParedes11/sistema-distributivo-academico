@@ -31,6 +31,11 @@ class Carrera extends Model
     //         ->withTimestamps();
     // }
 
+    public function aulas()
+    {
+        return $this->hasMany(Aula::class);
+    }
+
     public function campus()
     {
         return $this->belongsTo(Campus::class);

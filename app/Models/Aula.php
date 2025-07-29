@@ -14,6 +14,7 @@ class Aula extends Model
         'nombre',
         'codigo',
         'campus_id',
+        'carrera_id',
         'edificio',
         'capacidad',
         'tipo',
@@ -31,6 +32,11 @@ class Aula extends Model
     public function campus()
     {
         return $this->belongsTo(Campus::class);
+    }
+
+    public function carrera()
+    {
+        return $this->belongsTo(Carrera::class);
     }
 
     public function horarios()

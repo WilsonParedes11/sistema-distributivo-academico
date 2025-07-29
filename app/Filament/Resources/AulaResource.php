@@ -33,7 +33,21 @@ class AulaResource extends Resource
                     ->options(function () {
                         return \App\Models\Campus::all()->pluck('nombre', 'id');
                     })
-                    ->required(),
+                    ->required()
+                    ->reactive(),
+                Forms\Components\Select::make('carrera_id')
+                    ->label('Carrera')
+                    ->options(function (callable $get) {
+                        $campusId = $get('campus_id');
+                        if (!$campusId) {
+                            return [];
+                        }
+                        return \App\Models\Carrera::where('campus_id', $campusId)->pluck('nombre', 'id');
+                    })
+                    ->required()
+                    ->searchable()
+                    ->reactive()
+                    ->disabled(fn (callable $get) => !$get('campus_id')),
                 Forms\Components\TextInput::make('edificio')
                     ->maxLength(255)
                     ->default(null),

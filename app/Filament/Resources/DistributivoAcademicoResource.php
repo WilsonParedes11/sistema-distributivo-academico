@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\DistributivoAcademicoResource\Pages;
-use App\Filament\Resources\DistributivoAcademicoResource\RelationManagers;
 use App\Models\DistributivoAcademico;
 use App\Models\PeriodoAcademico;
 use Filament\Forms;
@@ -12,11 +11,10 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Models\User;
 use App\Models\Asignatura;
 use App\Models\Carrera;
 use App\Models\Campus;
+use App\Models\Aula;
 
 class DistributivoAcademicoResource extends Resource
 {
@@ -33,7 +31,37 @@ class DistributivoAcademicoResource extends Resource
                     ->options(PeriodoAcademico::where('activo', true)->get()->mapWithKeys(function ($periodo) {
                         return [$periodo->id => $periodo->nombre . ' ' . $periodo->anio . ' ' . $periodo->periodo];
                     }))
-                    ->required(),
+                    ->required()
+                    ->reactive(),
+                Forms\Components\Select::make('campus_id')
+                    ->label('Campus')
+                    ->options(fn() => Campus::all()->pluck('nombre', 'id'))
+                    ->required()
+                    ->reactive(),
+                Forms\Components\Select::make('carrera_id')
+                    ->label('Carrera')
+                    ->options(function (callable $get) {
+                        $campusId = $get('campus_id');
+                        if (!$campusId)
+                            return [];
+                        return Carrera::where('campus_id', $campusId)->pluck('nombre', 'id');
+                    })
+                    ->required()
+                    ->searchable()
+                    ->reactive()
+                    ->disabled(fn(callable $get) => !$get('campus_id')),
+                Forms\Components\Select::make('asignatura_id')
+                    ->label('Asignatura')
+                    ->options(function (callable $get) {
+                        $carreraId = $get('carrera_id');
+                        if (!$carreraId)
+                            return [];
+                        return Asignatura::where('carrera_id', $carreraId)->pluck('nombre', 'id');
+                    })
+                    ->required()
+                    ->searchable()
+                    ->reactive()
+                    ->disabled(fn(callable $get) => !$get('carrera_id')),
                 Forms\Components\Select::make('docente_id')
                     ->label('Docente')
                     ->options(\App\Models\Docente::all()->mapWithKeys(function ($docente) {
@@ -42,36 +70,47 @@ class DistributivoAcademicoResource extends Resource
                     ->searchable(['nombres', 'apellidos', 'cedula'])
                     ->preload()
                     ->required(),
-                Forms\Components\Select::make('asignatura_id')
-                    ->label('Asignatura')
-                    ->options(Asignatura::all()->mapWithKeys(function ($asignatura) {
-                        return [$asignatura->id => $asignatura->nombre];
-                    }))
-                    ->searchable(['nombre'])
-                    ->preload()
-                    ->required(),
-                Forms\Components\Select::make('carrera_id')
-                    ->label('Carrera')
-                    ->options(Carrera::all()->mapWithKeys(function ($carrera) {
-                        return [$carrera->id => $carrera->nombre];
-                    }))
-                    ->searchable(['nombre'])
-                    ->preload()
-                    ->required(),
-                Forms\Components\Select::make('campus_id')
-                    ->label('Campus')
-                    ->options(Campus::all()->mapWithKeys(function ($campus) {
-                        return [$campus->id => $campus->nombre];
-                    }))
-                    ->searchable(['nombre'])
-                    ->preload()
-                    ->required(),
-                Forms\Components\TextInput::make('paralelo')
+                Forms\Components\Select::make('semestre')
+                    ->label('Semestre')
+                    ->options([
+                        1 => 'I',
+                        2 => 'II',
+                        3 => 'III',
+                        4 => 'IV',
+                        5 => 'V',
+                    ])
                     ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('semestre')
+                    ->reactive(),
+                Forms\Components\Select::make('paralelo')
+                    ->label('Paralelo (Aula)')
+                    ->options(function (callable $get) {
+                        $carreraId = $get('carrera_id');
+                        $semestre = $get('semestre');
+                        if (!$carreraId || !$semestre)
+                            return [];
+                        // Buscar aulas disponibles para la carrera y semestre
+                        $aulas = Aula::where('carrera_id', $carreraId)->get();
+                        $paralelos = [];
+                        foreach ($aulas as $aula) {
+                            // Validar que el aula no esté ocupada en ese semestre
+                            $ocupado = DistributivoAcademico::where('carrera_id', $carreraId)
+                                ->where('semestre', $semestre)
+                                ->where('paralelo', $aula->codigo)
+                                ->where('activo', true)
+                                ->exists();
+                            if (!$ocupado) {
+                                $paralelos[$aula->codigo] = $aula->codigo . ' - ' . ($aula->nombre ?? $aula->paralelo ?? '');
+                            }
+                        }
+                        return $paralelos;
+                    })
                     ->required()
-                    ->numeric(),
+                    ->searchable()
+                    ->reactive()
+                    ->disabled(fn(callable $get) => !$get('carrera_id') || !$get('semestre'))
+                    ->validationMessages([
+                        'required' => 'Debe seleccionar un aula/paralelo disponible para este semestre.',
+                    ]),
                 Forms\Components\Select::make('jornada')
                     ->options([
                         'matutina' => 'Matutina',
@@ -139,11 +178,23 @@ class DistributivoAcademicoResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->sortable(),
                 Tables\Columns\TextColumn::make('paralelo')
-                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->label('Paralelo (Aula)')
+                    ->formatStateUsing(function ($state) {
+                        $aula = \App\Models\Aula::where('codigo', $state)->first();
+                        if ($aula) {
+                            return $aula->codigo . ' - ' . ($aula->nombre ?? $aula->paralelo ?? '');
+                        }
+                        return $state;
+                    })
+                    ->toggleable(true)
                     ->searchable(),
                 Tables\Columns\TextColumn::make('semestre')
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->numeric()
+                    ->label('Semestre')
+                    ->formatStateUsing(function ($state) {
+                        $romanos = [1 => 'I', 2 => 'II', 3 => 'III', 4 => 'IV', 5 => 'V', 6 => 'VI', 7 => 'VII', 8 => 'VIII', 9 => 'IX', 10 => 'X'];
+                        return $romanos[$state] ?? $state;
+                    })
+                    ->toggleable(true)
                     ->sortable(),
                 Tables\Columns\TextColumn::make('jornada')
                     ->toggleable(isToggledHiddenByDefault: true),

@@ -24,11 +24,15 @@ class Campus extends Model
     ];
 
     // Relaciones
+    // public function carreras()
+    // {
+    //     return $this->belongsToMany(Carrera::class, 'campus_carreras')
+    //         ->withPivot('activa')
+    //         ->withTimestamps();
+    // }
     public function carreras()
     {
-        return $this->belongsToMany(Carrera::class, 'campus_carreras')
-            ->withPivot('activa')
-            ->withTimestamps();
+        return $this->hasMany(Carrera::class);
     }
 
     public function carrerasActivas()

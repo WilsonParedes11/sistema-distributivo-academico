@@ -23,6 +23,10 @@ class CarreraResource extends Resource
     {
         return $form
             ->schema([
+                Forms\Components\Select::make('campus_id')
+                    ->label('Campus')
+                    ->relationship('campus', 'nombre')
+                    ->required(),
                 Forms\Components\TextInput::make('nombre')
                     ->required()
                     ->maxLength(255),
@@ -49,6 +53,9 @@ class CarreraResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('campus.nombre')
+                    ->label('Campus')
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('nombre')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('codigo')

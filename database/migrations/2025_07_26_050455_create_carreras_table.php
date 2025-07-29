@@ -9,6 +9,7 @@ return new class extends Migration {
     {
         Schema::create('carreras', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('campus_id')->constrained('campus');
             $table->string('nombre');
             $table->string('codigo')->unique();
             $table->enum('tipo', ['tecnica', 'tecnologica']);

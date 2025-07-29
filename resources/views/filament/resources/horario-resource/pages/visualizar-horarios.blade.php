@@ -56,21 +56,19 @@
                                     </td>
 
                                     @foreach(['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] as $dia)
-                                        <td
-                                            class="px-2 py-2 whitespace-nowrap text-sm text-gray-900 border-l border-gray-200 relative">
-                                            @php
-                                                $horariosDelDia = $horariosPorDia[$dia] ?? collect();
-                                                $horarioEnRango = $horariosDelDia->first(function ($horario) use ($rangoHora) {
-                                                    [$inicioRango, $finRango] = explode('-', $rangoHora);
-                                                    $inicioHorario = $horario->hora_inicio;
-                                                    $finHorario = $horario->hora_fin;
+                                        @php
+                                            $horariosDelDia = $horariosPorDia[$dia] ?? collect();
+                                            $horarioEnRango = $horariosDelDia->first(function ($horario) use ($rangoHora) {
+                                                [$inicioRango, $finRango] = explode('-', $rangoHora);
+                                                $inicioHorario = \Carbon\Carbon::parse($horario->hora_inicio)->format('H:i');
+                                                $finHorario = \Carbon\Carbon::parse($horario->hora_fin)->format('H:i');
+                                                return ($inicioHorario >= $inicioRango && $inicioHorario < $finRango) ||
+                                                    ($finHorario > $inicioRango && $finHorario <= $finRango) ||
+                                                    ($inicioHorario <= $inicioRango && $finHorario >= $finRango);
+                                            });
+                                        @endphp
 
-                                                    return ($inicioHorario >= $inicioRango && $inicioHorario < $finRango) ||
-                                                        ($finHorario > $inicioRango && $finHorario <= $finRango) ||
-                                                        ($inicioHorario <= $inicioRango && $finHorario >= $finRango);
-                                                });
-                                            @endphp
-
+                                        <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900 border-l border-gray-200 relative">
                                             @if($horarioEnRango)
                                                 <div class="
                                                                     rounded-lg p-2 text-xs h-full min-h-[80px] flex flex-col justify-center

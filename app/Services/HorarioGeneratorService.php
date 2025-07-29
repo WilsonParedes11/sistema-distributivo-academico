@@ -36,6 +36,7 @@ class HorarioGeneratorService
     ];
 
     private array $horariosNocturna = [
+        ['inicio' => '18:00', 'fin' => '19:00'],
         ['inicio' => '19:00', 'fin' => '20:00'],
         ['inicio' => '20:00', 'fin' => '21:00'],
         ['inicio' => '21:00', 'fin' => '22:00'],
@@ -52,6 +53,12 @@ class HorarioGeneratorService
         ['inicio' => '16:00', 'fin' => '17:00'],
         ['inicio' => '17:00', 'fin' => '18:00'],
     ];
+
+    // Máximo de horas por día para una materia
+    private const MAX_HORAS_POR_DIA_MATERIA = 2;
+
+    // Cache para aulas asignadas por semestre
+    private array $aulasAsignadasPorSemestre = [];
 
     public function generarHorarios(int $periodoAcademicoId, array $campusIds = []): array
     {
@@ -91,6 +98,9 @@ class HorarioGeneratorService
             // Limpiar horarios existentes del período
             $this->limpiarHorariosExistentes($periodoAcademicoId, $campusIds);
 
+            // Inicializar cache de aulas por semestre
+            $this->inicializarAulasPorSemestre($distributivos);
+
             // Procesamiento ordenado por carga académica
             $resultado = $this->procesarDistributivosOrdenados($distributivos);
 
@@ -103,6 +113,26 @@ class HorarioGeneratorService
         }
 
         return $resultado;
+    }
+
+    private function inicializarAulasPorSemestre(Collection $distributivos): void
+    {
+        // Agrupar por campus, carrera, semestre y paralelo para primer semestre
+        $grupos = $distributivos->where('semestre', 1)->groupBy(function ($dist) {
+            return "{$dist->campus_id}_{$dist->carrera_id}_{$dist->semestre}_{$dist->paralelo}";
+        });
+
+        foreach ($grupos as $key => $distribsGrupo) {
+            $primerDist = $distribsGrupo->first();
+
+            // Seleccionar una aula para todo el grupo de primer semestre
+            $aula = $this->seleccionarAulaParaSemestre($primerDist->campus, $primerDist->jornada);
+
+            if ($aula) {
+                $this->aulasAsignadasPorSemestre[$key] = $aula;
+                Log::info("Aula {$aula->codigo} asignada para semestre 1, carrera {$primerDist->carrera->nombre}, paralelo {$primerDist->paralelo}");
+            }
+        }
     }
 
     private function procesarDistributivosOrdenados(Collection $distributivos): array
@@ -154,16 +184,13 @@ class HorarioGeneratorService
 
                     $horariosValidosCreados = 0;
                     foreach ($horarios as $horario) {
-                        // Validación final antes de crear
-                        if ($this->validarReglasDocente($horario, $horariosGlobalesAsignados, $distributivo)) {
-                            try {
-                                Horario::create($horario);
-                                $horariosGlobalesAsignados[] = $horario;
-                                $horariosValidosCreados++;
-                                $resultado['exitosos']++;
-                            } catch (\Exception $e) {
-                                Log::error("Error creando horario: " . $e->getMessage());
-                            }
+                        try {
+                            Horario::create($horario);
+                            $horariosGlobalesAsignados[] = $horario;
+                            $horariosValidosCreados++;
+                            $resultado['exitosos']++;
+                        } catch (\Exception $e) {
+                            Log::error("Error creando horario: " . $e->getMessage());
                         }
                     }
 
@@ -188,9 +215,9 @@ class HorarioGeneratorService
 
     private function calcularHorariosParaDistributivoMejorado(DistributivoAcademico $distributivo, array $horariosExistentes): array
     {
-        $horasClase = $distributivo->horas_clase_semana; // 7 horas
-        $horasPracticas = $distributivo->horas_componente_practico; // 3 horas
-        $horasTeoricas = $horasClase - $horasPracticas; // 4 horas
+        $horasClase = $distributivo->horas_clase_semana;
+        $horasPracticas = $distributivo->horas_componente_practico;
+        $horasTeoricas = $horasClase - $horasPracticas;
         $jornada = $distributivo->jornada;
         $campus = $distributivo->campus;
         $semestre = $distributivo->semestre;
@@ -207,204 +234,253 @@ class HorarioGeneratorService
             throw new \Exception("No hay horarios definidos para la jornada: {$jornada}");
         }
 
-        // Seleccionar una única aula para la asignatura si es de primer semestre
-        $aulaAsignada = null;
-        if ($semestre == 1) {
-            $aulaAsignada = $this->seleccionarAulaParaAsignatura($campus, $distributivo->id, $jornada);
-            if (!$aulaAsignada) {
-                throw new \Exception("No se encontró aula disponible para la asignatura {$distributivo->asignatura->nombre} en el campus {$campus->id}");
-            }
+        // Obtener el aula para este distributivo
+        $aulaAsignada = $this->obtenerAulaParaDistributivo($distributivo);
+        if (!$aulaAsignada) {
+            throw new \Exception("No se encontró aula disponible para la asignatura {$distributivo->asignatura->nombre}");
         }
 
-        // Distribuir horas prácticas y teóricas por separado
-        $distribucionesPracticas = $horasPracticas > 0 ? $this->calcularDistribucionOptima($horasPracticas) : [];
-        $distribucionesTeoricas = $horasTeoricas > 0 ? $this->calcularDistribucionOptima($horasTeoricas) : [];
         $horariosGenerados = [];
-
-        // Determinar días válidos según jornada
         $diasValidos = $jornada === 'intensiva' ? $this->diasSemanaIntensiva : $this->diasSemana;
 
         // Buscar los mejores días disponibles para este docente
         $diasDisponiblesParaDocente = $this->encontrarDiasDisponiblesParaDocente($distributivo, $diasValidos, $horariosExistentes);
 
-        // Asignar horarios prácticos
-        foreach ($distribucionesPracticas as $distribucion) {
-            $horasBloque = $distribucion['horas'];
-            $diaAsignado = false;
+        // Calcular cuántos días necesitamos basado en el máximo de horas por día
+        $diasNecesarios = ceil($horasClase / self::MAX_HORAS_POR_DIA_MATERIA);
 
-            foreach ($diasDisponiblesParaDocente as $diaInfo) {
-                $dia = $diaInfo['dia'];
+        // Verificar que tenemos suficientes días disponibles
+        if (count($diasDisponiblesParaDocente) < $diasNecesarios) {
+            throw new \Exception("No hay suficientes días disponibles para asignar {$horasClase} horas a {$distributivo->asignatura->nombre}. Días necesarios: {$diasNecesarios}, Días disponibles: " . count($diasDisponiblesParaDocente));
+        }
 
-                try {
-                    $horariosParaDia = $this->seleccionarHorarioEnDiaMejorado(
-                        $dia,
-                        $horasBloque,
-                        $horariosDisponibles,
-                        array_merge($horariosExistentes, $horariosGenerados),
-                        $distributivo
-                    );
+        // Distribución de horas: máximo 2 horas por día
+        $horasRestantes = $horasClase;
+        $horasPracticasRestantes = $horasPracticas;
 
-                    if (!empty($horariosParaDia)) {
-                        $horariosDiaCompletos = [];
-                        $todosLosHorariosValidos = true;
+        // Usar todos los días disponibles, no limitarnos solo a los necesarios
+        $diasParaUsar = $diasDisponiblesParaDocente;
 
-                        foreach ($horariosParaDia as $horario) {
-                            $horarioTemp = [
-                                'distributivo_academico_id' => $distributivo->id,
-                                'dia_semana' => $dia,
-                                'hora_inicio' => $horario['inicio'],
-                                'hora_fin' => $horario['fin'],
-                                'tipo_clase' => 'practica',
-                            ];
+        foreach ($diasParaUsar as $diaInfo) {
+            if ($horasRestantes <= 0)
+                break;
 
-                            if ($this->validarReglasDocenteBasico($horarioTemp, array_merge($horariosExistentes, $horariosGenerados), $distributivo)) {
-                                // Usar la misma aula para primer semestre, o seleccionar una nueva si no es primer semestre
-                                $aula = ($semestre == 1) ? $aulaAsignada : $this->seleccionarAula($campus, $dia, $horario['inicio'], $horario['fin'], $distributivo->id);
+            $dia = $diaInfo['dia'];
 
-                                if ($aula) {
-                                    $horarioTemp['aula'] = $aula->codigo;
-                                    $horarioTemp['edificio'] = $aula->edificio;
-                                    $horariosDiaCompletos[] = $horarioTemp;
-                                } else {
-                                    $todosLosHorariosValidos = false;
-                                    break;
-                                }
-                            } else {
-                                $todosLosHorariosValidos = false;
-                                break;
-                            }
-                        }
+            // Calcular cuántas horas asignar en este día
+            $horasParaEsteDia = min(self::MAX_HORAS_POR_DIA_MATERIA, $horasRestantes);
 
-                        if ($todosLosHorariosValidos && count($horariosDiaCompletos) === count($horariosParaDia)) {
-                            $horariosGenerados = array_merge($horariosGenerados, $horariosDiaCompletos);
-                            $diaAsignado = true;
-                            Log::info("Día {$dia} asignado para distributivo {$distributivo->id} - {$distributivo->asignatura->nombre} (práctico)");
-                            break;
-                        }
-                    }
-                } catch (\Exception $e) {
-                    Log::warning("Error procesando día {$dia} para distributivo {$distributivo->id}: " . $e->getMessage());
-                }
-            }
+            // Intentar asignar horas en este día
+            $horariosDelDia = $this->asignarHorasEnDia(
+                $dia,
+                $horasParaEsteDia,
+                $horariosDisponibles,
+                $horariosExistentes,
+                $horariosGenerados,
+                $distributivo,
+                $aulaAsignada,
+                $horasPracticasRestantes
+            );
 
-            if (!$diaAsignado) {
-                throw new \Exception("No se encontró día y horario disponibles para {$horasBloque} horas prácticas en la jornada {$jornada}. Aulas activas: " . Aula::where('campus_id', $distributivo->campus_id)->where('activa', true)->count());
+            if (!empty($horariosDelDia)) {
+                $horariosGenerados = array_merge($horariosGenerados, $horariosDelDia);
+                $horasRestantes -= count($horariosDelDia);
+
+                Log::info("Asignadas " . count($horariosDelDia) . " horas en {$dia} para {$distributivo->asignatura->nombre}. Horas restantes: {$horasRestantes}");
+            } else {
+                Log::warning("No se pudieron asignar horas en {$dia} para {$distributivo->asignatura->nombre}");
             }
         }
 
-        // Asignar horarios teóricos
-        foreach ($distribucionesTeoricas as $distribucion) {
-            $horasBloque = $distribucion['horas'];
-            $diaAsignado = false;
+        // Si aún faltan horas, intentar con una estrategia más agresiva
+        if ($horasRestantes > 0) {
+            Log::warning("Intentando estrategia alternativa para asignar {$horasRestantes} horas restantes para {$distributivo->asignatura->nombre}");
 
-            foreach ($diasDisponiblesParaDocente as $diaInfo) {
+            // Intentar buscar cualquier espacio disponible sin restricción de máximo por día
+            foreach ($diasParaUsar as $diaInfo) {
+                if ($horasRestantes <= 0)
+                    break;
+
                 $dia = $diaInfo['dia'];
 
-                try {
-                    $horariosParaDia = $this->seleccionarHorarioEnDiaMejorado(
-                        $dia,
-                        $horasBloque,
-                        $horariosDisponibles,
-                        array_merge($horariosExistentes, $horariosGenerados),
-                        $distributivo
-                    );
+                // Intentar asignar una hora más en este día, sin importar cuántas ya tenga
+                $horariosDelDia = $this->asignarHorasEnDia(
+                    $dia,
+                    min(1, $horasRestantes), // Solo una hora a la vez
+                    $horariosDisponibles,
+                    $horariosExistentes,
+                    $horariosGenerados,
+                    $distributivo,
+                    $aulaAsignada,
+                    $horasPracticasRestantes
+                );
 
-                    if (!empty($horariosParaDia)) {
-                        $horariosDiaCompletos = [];
-                        $todosLosHorariosValidos = true;
+                if (!empty($horariosDelDia)) {
+                    $horariosGenerados = array_merge($horariosGenerados, $horariosDelDia);
+                    $horasRestantes -= count($horariosDelDia);
 
-                        foreach ($horariosParaDia as $horario) {
-                            $horarioTemp = [
-                                'distributivo_academico_id' => $distributivo->id,
-                                'dia_semana' => $dia,
-                                'hora_inicio' => $horario['inicio'],
-                                'hora_fin' => $horario['fin'],
-                                'tipo_clase' => 'teorica',
-                            ];
-
-                            if ($this->validarReglasDocenteBasico($horarioTemp, array_merge($horariosExistentes, $horariosGenerados), $distributivo)) {
-                                // Usar la misma aula para primer semestre, o seleccionar una nueva si no es primer semestre
-                                $aula = ($semestre == 1) ? $aulaAsignada : $this->seleccionarAula($campus, $dia, $horario['inicio'], $horario['fin'], $distributivo->id);
-
-                                if ($aula) {
-                                    $horarioTemp['aula'] = $aula->codigo;
-                                    $horarioTemp['edificio'] = $aula->edificio;
-                                    $horariosDiaCompletos[] = $horarioTemp;
-                                } else {
-                                    $todosLosHorariosValidos = false;
-                                    break;
-                                }
-                            } else {
-                                $todosLosHorariosValidos = false;
-                                break;
-                            }
-                        }
-
-                        if ($todosLosHorariosValidos && count($horariosDiaCompletos) === count($horariosParaDia)) {
-                            $horariosGenerados = array_merge($horariosGenerados, $horariosDiaCompletos);
-                            $diaAsignado = true;
-                            Log::info("Día {$dia} asignado para distributivo {$distributivo->id} - {$distributivo->asignatura->nombre} (teórico)");
-                            break;
-                        }
-                    }
-                } catch (\Exception $e) {
-                    Log::warning("Error procesando día {$dia} para distributivo {$distributivo->id}: " . $e->getMessage());
+                    Log::info("Asignada 1 hora emergencia en {$dia} para {$distributivo->asignatura->nombre}. Horas restantes: {$horasRestantes}");
                 }
             }
+        }
 
-            if (!$diaAsignado) {
-                throw new \Exception("No se encontró día y horario disponibles para {$horasBloque} horas teóricas en la jornada {$jornada}. Aulas activas: " . Aula::where('campus_id', $distributivo->campus_id)->where('activa', true)->count());
+        // Si todavía faltan horas, intentar en TODOS los días disponibles otra vez
+        if ($horasRestantes > 0) {
+            Log::warning("Último intento: buscando espacios en cualquier día para {$horasRestantes} horas de {$distributivo->asignatura->nombre}");
+
+            // Recalcular días disponibles
+            $todosLosDiasDisponibles = $this->encontrarDiasDisponiblesParaDocente($distributivo, $diasValidos, array_merge($horariosExistentes, $horariosGenerados));
+
+            foreach ($todosLosDiasDisponibles as $diaInfo) {
+                if ($horasRestantes <= 0)
+                    break;
+
+                $dia = $diaInfo['dia'];
+
+                if ($diaInfo['disponibilidad'] > 0) {
+                    $horariosDelDia = $this->asignarHorasEnDia(
+                        $dia,
+                        min($diaInfo['disponibilidad'], $horasRestantes),
+                        $horariosDisponibles,
+                        $horariosExistentes,
+                        $horariosGenerados,
+                        $distributivo,
+                        $aulaAsignada,
+                        $horasPracticasRestantes
+                    );
+
+                    if (!empty($horariosDelDia)) {
+                        $horariosGenerados = array_merge($horariosGenerados, $horariosDelDia);
+                        $horasRestantes -= count($horariosDelDia);
+
+                        Log::info("Último intento exitoso: asignadas " . count($horariosDelDia) . " horas en {$dia} para {$distributivo->asignatura->nombre}. Horas restantes: {$horasRestantes}");
+                    }
+                }
             }
         }
 
         // Verificar que se asignaron todas las horas requeridas
-        $horasAsignadas = 0;
-        $horasPracticasAsignadas = 0;
-        foreach ($horariosGenerados as $horario) {
-            $inicio = Carbon::parse($horario['hora_inicio']);
-            $fin = Carbon::parse($horario['hora_fin']);
-            $horasBloque = $fin->diffInHours($inicio);
-            $horasAsignadas += $horasBloque;
-            if ($horario['tipo_clase'] === 'practica') {
-                $horasPracticasAsignadas += $horasBloque;
-            }
+        if (count($horariosGenerados) !== $horasClase) {
+            throw new \Exception("No se asignaron todas las horas requeridas para {$distributivo->asignatura->nombre}. Horas asignadas: " . count($horariosGenerados) . ", Horas requeridas: {$horasClase}");
         }
 
-        if ($horasAsignadas !== $horasClase) {
-            throw new \Exception("No se asignaron todas las horas requeridas para {$distributivo->asignatura->nombre}. Horas asignadas: {$horasAsignadas}, Horas requeridas: {$horasClase}");
-        }
-
+        // Verificar horas prácticas - contar las que realmente se asignaron
+        $horasPracticasAsignadas = collect($horariosGenerados)->where('tipo_clase', 'practica')->count();
         if ($horasPracticasAsignadas !== $horasPracticas) {
+            // Log de debug para ver qué pasó
+            Log::error("Error en horas prácticas para {$distributivo->asignatura->nombre}:");
+            Log::error("Horas prácticas requeridas: {$horasPracticas}");
+            Log::error("Horas prácticas asignadas: {$horasPracticasAsignadas}");
+            Log::error("Horarios generados: " . json_encode(array_map(function ($h) {
+                return [
+                    'dia' => $h['dia_semana'],
+                    'inicio' => $h['hora_inicio'],
+                    'tipo' => $h['tipo_clase']
+                ];
+            }, $horariosGenerados)));
+
             throw new \Exception("No se asignaron las horas prácticas requeridas para {$distributivo->asignatura->nombre}. Horas prácticas asignadas: {$horasPracticasAsignadas}, Horas prácticas requeridas: {$horasPracticas}");
         }
+
+        Log::info("Horarios generados exitosamente para {$distributivo->asignatura->nombre}: " . count($horariosGenerados) . " horas ({$horasPracticasAsignadas} prácticas, " . (count($horariosGenerados) - $horasPracticasAsignadas) . " teóricas)");
 
         return $horariosGenerados;
     }
 
-    private function seleccionarAulaParaAsignatura($campus, int $distributivoId, string $jornada): ?Aula
+    private function asignarHorasEnDia(string $dia, int $horasRequeridas, array $horariosDisponibles, array $horariosExistentes, array $horariosGenerados, DistributivoAcademico $distributivo, Aula $aula, int &$horasPracticasRestantes): array
     {
-        // Seleccionar una aula disponible para toda la asignatura, considerando todos los horarios posibles de la jornada
-        $horariosDisponibles = $this->obtenerHorariosPorJornada($jornada);
+        $horariosDelDia = [];
+        $horasAsignadas = 0;
+
+        // Obtener todos los horarios ya ocupados en este día para este docente
+        $horariosOcupadosDocente = [];
+        $todosLosHorarios = array_merge($horariosExistentes, $horariosGenerados);
+
+        foreach ($todosLosHorarios as $horario) {
+            if ($horario['dia_semana'] === $dia) {
+                $otroDistributivo = DistributivoAcademico::find($horario['distributivo_academico_id']);
+                if ($otroDistributivo && $otroDistributivo->docente_id === $distributivo->docente_id) {
+                    $horariosOcupadosDocente[] = $horario['hora_inicio'] . '-' . $horario['hora_fin'];
+                }
+            }
+        }
+
+        Log::debug("Día {$dia} - {$distributivo->asignatura->nombre}: Horarios ocupados del docente: " . implode(', ', $horariosOcupadosDocente));
+
+        // Intentar asignar horarios individuales
+        foreach ($horariosDisponibles as $horarioSlot) {
+            if ($horasAsignadas >= $horasRequeridas)
+                break;
+
+            $slotKey = $horarioSlot['inicio'] . '-' . $horarioSlot['fin'];
+
+            // Verificar si este slot está disponible para el docente
+            if (
+                $this->estaHorarioDisponibleParaDocente($dia, $horarioSlot['inicio'], $horarioSlot['fin'], $horariosExistentes, $horariosGenerados, $distributivo) &&
+                $this->estaAulaDisponible($aula, $dia, $horarioSlot['inicio'], $horarioSlot['fin'], $horariosExistentes, $horariosGenerados)
+            ) {
+                // Priorizar horas prácticas primero
+                $tipoClase = ($horasPracticasRestantes > 0) ? 'practica' : 'teorica';
+
+                $horarioNuevo = [
+                    'distributivo_academico_id' => $distributivo->id,
+                    'dia_semana' => $dia,
+                    'hora_inicio' => $horarioSlot['inicio'],
+                    'hora_fin' => $horarioSlot['fin'],
+                    'tipo_clase' => $tipoClase,
+                    'aula' => $aula->codigo,
+                    'edificio' => $aula->edificio,
+                ];
+
+                $horariosDelDia[] = $horarioNuevo;
+
+                if ($tipoClase === 'practica') {
+                    $horasPracticasRestantes--;
+                }
+
+                $horasAsignadas++;
+                Log::debug("Asignado: {$dia} {$horarioSlot['inicio']}-{$horarioSlot['fin']} ({$tipoClase}) para {$distributivo->asignatura->nombre}");
+            } else {
+                Log::debug("No disponible: {$dia} {$horarioSlot['inicio']}-{$horarioSlot['fin']} para {$distributivo->asignatura->nombre}");
+            }
+        }
+
+        // Debug: log de lo que se asignó
+        if (!empty($horariosDelDia)) {
+            $practicas = array_filter($horariosDelDia, fn($h) => $h['tipo_clase'] === 'practica');
+            $teoricas = array_filter($horariosDelDia, fn($h) => $h['tipo_clase'] === 'teorica');
+
+            Log::debug("Día {$dia} - {$distributivo->asignatura->nombre}: " .
+                count($practicas) . " prácticas, " .
+                count($teoricas) . " teóricas. " .
+                "Prácticas restantes: {$horasPracticasRestantes}");
+        } else {
+            Log::warning("No se pudieron asignar horas en {$dia} para {$distributivo->asignatura->nombre} - Sin horarios disponibles");
+        }
+
+        return $horariosDelDia;
+    }
+
+    private function obtenerAulaParaDistributivo(DistributivoAcademico $distributivo): ?Aula
+    {
+        // Si es primer semestre, usar el aula pre-asignada
+        if ($distributivo->semestre == 1) {
+            $key = "{$distributivo->campus_id}_{$distributivo->carrera_id}_{$distributivo->semestre}_{$distributivo->paralelo}";
+            return $this->aulasAsignadasPorSemestre[$key] ?? null;
+        }
+
+        // Para otros semestres, seleccionar aula disponible
+        return $this->seleccionarAulaParaSemestre($distributivo->campus, $distributivo->jornada);
+    }
+
+    private function seleccionarAulaParaSemestre($campus, string $jornada): ?Aula
+    {
         $aula = Aula::where('campus_id', $campus->id)
             ->where('activa', true)
-            ->whereNotExists(function ($query) use ($distributivoId, $horariosDisponibles) {
-                $query->select(DB::raw(1))
-                    ->from('horarios')
-                    ->whereRaw('horarios.aula = aulas.codigo')
-                    ->whereIn('dia_semana', $this->diasSemana)
-                    ->where(function ($q) use ($horariosDisponibles) {
-                        foreach ($horariosDisponibles as $horario) {
-                            $q->orWhere(function ($q2) use ($horario) {
-                                $q2->where('hora_inicio', '<', $horario['fin'])
-                                    ->where('hora_fin', '>', $horario['inicio']);
-                            });
-                        }
-                    });
-            })
             ->first();
 
         if (!$aula) {
-            Log::warning("No se encontró aula disponible para distributivo {$distributivoId} en campus {$campus->id} para la jornada {$jornada}. Aulas activas totales: " . Aula::where('campus_id', $campus->id)->where('activa', true)->count());
+            Log::warning("No se encontró aula disponible en campus {$campus->id} para la jornada {$jornada}");
         }
 
         return $aula;
@@ -414,10 +490,12 @@ class HorarioGeneratorService
     {
         $disponibilidadPorDia = [];
         $docenteId = $distributivo->docente_id;
+        $maxHorariosPorDia = count($this->obtenerHorariosPorJornada($distributivo->jornada));
 
         foreach ($diasValidos as $dia) {
             $horariosOcupadosDocente = 0;
 
+            // Contar horarios ocupados por el docente en este día
             foreach ($horariosExistentes as $horario) {
                 if ($horario['dia_semana'] === $dia) {
                     $otroDistributivo = DistributivoAcademico::find($horario['distributivo_academico_id']);
@@ -427,378 +505,66 @@ class HorarioGeneratorService
                 }
             }
 
+            $disponibilidad = $maxHorariosPorDia - $horariosOcupadosDocente;
+
             $disponibilidadPorDia[] = [
                 'dia' => $dia,
                 'horarios_ocupados' => $horariosOcupadosDocente,
-                'disponibilidad' => 4 - $horariosOcupadosDocente // máximo 4 horarios por día en nocturna
+                'disponibilidad' => max(0, $disponibilidad)
             ];
         }
 
+        // Ordenar por disponibilidad descendente para priorizar días con más espacios libres
         usort($disponibilidadPorDia, function ($a, $b) {
+            if ($a['disponibilidad'] === $b['disponibilidad']) {
+                return strcmp($a['dia'], $b['dia']);
+            }
             return $b['disponibilidad'] <=> $a['disponibilidad'];
         });
 
-        return $disponibilidadPorDia;
+        // Incluir todos los días que tienen al menos alguna disponibilidad
+        $diasConDisponibilidad = array_filter($disponibilidadPorDia, function ($dia) {
+            return $dia['disponibilidad'] > 0;
+        });
+
+        Log::info("Días disponibles para docente {$distributivo->docente->user->nombre_completo} - {$distributivo->asignatura->nombre}: " .
+            implode(', ', array_map(function ($d) {
+                return $d['dia'] . '(' . $d['disponibilidad'] . ')'; }, $diasConDisponibilidad)));
+
+        return array_values($diasConDisponibilidad);
     }
 
-    private function calcularDistribucionOptima(int $horasTotal): array
+    private function estaHorarioDisponibleParaDocente(string $dia, string $inicio, string $fin, array $horariosExistentes, array $horariosGenerados, DistributivoAcademico $distributivo): bool
     {
-        $distribuciones = [];
-        $horasRestantes = $horasTotal;
-
-        while ($horasRestantes > 0) {
-            if ($horasRestantes >= 3) {
-                $distribuciones[] = ['horas' => 3];
-                $horasRestantes -= 3;
-            } elseif ($horasRestantes >= 2) {
-                $distribuciones[] = ['horas' => 2];
-                $horasRestantes -= 2;
-            } else {
-                $distribuciones[] = ['horas' => 1];
-                $horasRestantes -= 1;
-            }
-        }
-
-        Log::info("Distribución óptima para {$horasTotal} horas: " . json_encode($distribuciones));
-        return $distribuciones;
-    }
-
-    private function seleccionarHorarioEnDiaMejorado(string $dia, int $horas, array $horariosDisponibles, array $horariosExistentes, DistributivoAcademico $distributivo): array
-    {
-        $horasYaAsignadasEnDia = $this->contarHorasAsignadasEnDia($dia, $distributivo->id, $horariosExistentes);
-
-        if ($horasYaAsignadasEnDia >= 3) {
-            return [];
-        }
-
-        $horasMaximasPermitidas = 3 - $horasYaAsignadasEnDia;
-        $horasAAsignar = min($horas, $horasMaximasPermitidas);
-
-        $mejorBloque = $this->encontrarMejorBloqueConsecutivo($dia, $horasAAsignar, $horariosDisponibles, $horariosExistentes, $distributivo);
-
-        return $mejorBloque;
-    }
-
-    private function encontrarMejorBloqueConsecutivo(string $dia, int $horas, array $horariosDisponibles, array $horariosExistentes, DistributivoAcademico $distributivo): array
-    {
-        for ($tamanoBloque = $horas; $tamanoBloque >= 1; $tamanoBloque--) {
-            for ($i = 0; $i <= count($horariosDisponibles) - $tamanoBloque; $i++) {
-                $bloque = [];
-                $esValido = true;
-
-                for ($j = 0; $j < $tamanoBloque; $j++) {
-                    $horarioActual = $horariosDisponibles[$i + $j];
-
-                    if (!$this->estaHorarioDisponible($dia, $horarioActual['inicio'], $horarioActual['fin'], $horariosExistentes, $distributivo)) {
-                        $esValido = false;
-                        break;
-                    }
-
-                    if ($j > 0) {
-                        $horarioAnterior = $horariosDisponibles[$i + $j - 1];
-                        if ($horarioAnterior['fin'] !== $horarioActual['inicio']) {
-                            $esValido = false;
-                            break;
-                        }
-                    }
-
-                    $bloque[] = $horarioActual;
-                }
-
-                if ($esValido && count($bloque) === $tamanoBloque) {
-                    return $bloque; // Relajamos la consecutividad con horarios existentes
-                }
-            }
-        }
-
-        return [];
-    }
-
-    private function validarReglasDocenteBasico(array $nuevoHorario, array $horariosExistentes, DistributivoAcademico $distributivo): bool
-    {
-        $dia = $nuevoHorario['dia_semana'];
         $docenteId = $distributivo->docente_id;
+        $todosLosHorarios = array_merge($horariosExistentes, $horariosGenerados);
 
-        foreach ($horariosExistentes as $horario) {
+        foreach ($todosLosHorarios as $horario) {
             if ($horario['dia_semana'] === $dia) {
                 $otroDistributivo = DistributivoAcademico::find($horario['distributivo_academico_id']);
-                if (
-                    $otroDistributivo && $otroDistributivo->docente_id === $docenteId &&
-                    $this->hayConflictoHorario($nuevoHorario['hora_inicio'], $nuevoHorario['hora_fin'], $horario['hora_inicio'], $horario['hora_fin'])
-                ) {
-                    Log::warning("Conflicto de horario para docente {$docenteId} en {$dia} de {$nuevoHorario['hora_inicio']} a {$nuevoHorario['hora_fin']} con distributivo {$horario['distributivo_academico_id']}");
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
-    private function validarAulasDisponibles(Collection $distributivos, array $campusIds): void
-    {
-        $campusIdsDistributivos = $distributivos->pluck('campus_id')->unique();
-
-        foreach ($campusIdsDistributivos as $campusId) {
-            $aulasActivas = Aula::where('campus_id', $campusId)
-                ->where('activa', true)
-                ->count();
-
-            if ($aulasActivas === 0) {
-                throw new \Exception("No hay aulas activas disponibles en el campus ID: {$campusId}");
-            }
-        }
-    }
-
-    private function validarDistributivo(DistributivoAcademico $distributivo): bool
-    {
-        if (!$distributivo->docente || !$distributivo->asignatura || !$distributivo->campus) {
-            return false;
-        }
-
-        if (!$distributivo->horas_clase_semana || $distributivo->horas_clase_semana <= 0) {
-            return false;
-        }
-
-        if ($distributivo->horas_componente_practico > $distributivo->horas_clase_semana) {
-            return false;
-        }
-
-        if (!in_array($distributivo->jornada, ['matutina', 'vespertina', 'nocturna', 'intensiva'])) {
-            return false;
-        }
-
-        return true;
-    }
-
-    private function calcularHorariosParaDistributivo(DistributivoAcademico $distributivo, array $horariosExistentes): array
-    {
-        $horasClase = $distributivo->horas_clase_semana;
-        $jornada = $distributivo->jornada;
-        $campus = $distributivo->campus;
-        $semestre = $distributivo->semestre;
-
-        if ($horasClase <= 0) {
-            throw new \Exception("Horas de clase inválidas: {$horasClase}");
-        }
-
-        $horariosDisponibles = $this->obtenerHorariosPorJornada($jornada);
-
-        if (empty($horariosDisponibles)) {
-            throw new \Exception("No hay horarios definidos para la jornada: {$jornada}");
-        }
-
-        $aulaAsignada = null;
-        if ($semestre == 1) {
-            $aulaAsignada = $this->seleccionarAulaParaAsignatura($campus, $distributivo->id, $jornada);
-            if (!$aulaAsignada) {
-                throw new \Exception("No se encontró aula disponible para la asignatura {$distributivo->asignatura->nombre} en el campus {$campus->id}");
-            }
-        }
-
-        $distribuciones = $this->calcularDistribucionSemanal($horasClase);
-        $horariosGenerados = [];
-
-        $diasValidos = $jornada === 'intensiva' ? $this->diasSemanaIntensiva : $this->diasSemana;
-
-        foreach ($distribuciones as $distribucion) {
-            $horasBloque = $distribucion['horas'];
-            $diaAsignado = false;
-
-            foreach ($diasValidos as $dia) {
-                try {
-                    $horariosParaDia = $this->seleccionarHorarioEnDia(
-                        $dia,
-                        $horasBloque,
-                        $horariosDisponibles,
-                        array_merge($horariosExistentes, $horariosGenerados),
-                        $distributivo
-                    );
-
-                    if (!empty($horariosParaDia)) {
-                        $horariosDiaCompletos = [];
-                        $todosLosHorariosValidos = true;
-
-                        foreach ($horariosParaDia as $horario) {
-                            $horarioTemp = [
-                                'distributivo_academico_id' => $distributivo->id,
-                                'dia_semana' => $dia,
-                                'hora_inicio' => $horario['inicio'],
-                                'hora_fin' => $horario['fin'],
-                                'tipo_clase' => $distributivo->horas_componente_practico > 0 ? 'practica' : 'teorica',
-                            ];
-
-                            if ($this->validarReglasDocente($horarioTemp, array_merge($horariosExistentes, $horariosGenerados), $distributivo)) {
-                                $aula = ($semestre == 1) ? $aulaAsignada : $this->seleccionarAula($campus, $dia, $horario['inicio'], $horario['fin'], $distributivo->id);
-
-                                if ($aula) {
-                                    $horarioTemp['aula'] = $aula->codigo;
-                                    $horarioTemp['edificio'] = $aula->edificio;
-                                    $horariosDiaCompletos[] = $horarioTemp;
-                                } else {
-                                    Log::warning("No se encontró aula disponible para {$dia} de {$horario['inicio']} a {$horario['fin']}");
-                                    $todosLosHorariosValidos = false;
-                                    break;
-                                }
-                            } else {
-                                Log::warning("Horario no válido por reglas del docente: {$dia} de {$horario['inicio']} a {$horario['fin']}");
-                                $todosLosHorariosValidos = false;
-                                break;
-                            }
-                        }
-
-                        if ($todosLosHorariosValidos && count($horariosDiaCompletos) === count($horariosParaDia)) {
-                            $horariosGenerados = array_merge($horariosGenerados, $horariosDiaCompletos);
-                            $diaAsignado = true;
-                            Log::info("Día {$dia} asignado exitosamente para distributivo {$distributivo->id} con " . count($horariosDiaCompletos) . " horarios");
-                            break;
-                        }
-                    }
-                } catch (\Exception $e) {
-                    Log::warning("Error procesando día {$dia}: " . $e->getMessage());
-                }
-            }
-
-            if (!$diaAsignado) {
-                $aulasActivas = Aula::where('campus_id', $distributivo->campus_id)
-                    ->where('activa', true)
-                    ->count();
-
-                throw new \Exception("No se encontró día y horario disponibles para {$horasBloque} horas en la jornada {$jornada}. Aulas activas en campus {$distributivo->campus_id}: {$aulasActivas}. Días intentados: " . implode(', ', $diasValidos));
-            }
-        }
-
-        return $horariosGenerados;
-    }
-
-    private function obtenerHorariosPorJornada(string $jornada): array
-    {
-        return match ($jornada) {
-            'matutina' => $this->horariosMatutina,
-            'vespertina' => $this->horariosVespertina,
-            'nocturna' => $this->horariosNocturna,
-            'intensiva' => $this->horariosIntensiva,
-            default => throw new \Exception("Jornada no válida: {$jornada}")
-        };
-    }
-
-    private function calcularDistribucionSemanal(int $horasTotal): array
-    {
-        $distribuciones = [];
-        $horasRestantes = $horasTotal;
-
-        while ($horasRestantes > 0) {
-            if ($horasRestantes >= 3) {
-                $distribuciones[] = ['horas' => 3];
-                $horasRestantes -= 3;
-            } elseif ($horasRestantes >= 2) {
-                $distribuciones[] = ['horas' => 2];
-                $horasRestantes -= 2;
-            } else {
-                $distribuciones[] = ['horas' => 1];
-                $horasRestantes -= 1;
-            }
-        }
-
-        Log::info("Distribución semanal para {$horasTotal} horas: " . json_encode($distribuciones));
-        return $distribuciones;
-    }
-
-    private function seleccionarHorarioEnDia(string $dia, int $horas, array $horariosDisponibles, array $horariosExistentes, DistributivoAcademico $distributivo): array
-    {
-        $horasYaAsignadasEnDia = $this->contarHorasAsignadasEnDia($dia, $distributivo->id, $horariosExistentes);
-
-        if ($horasYaAsignadasEnDia >= 3) {
-            Log::warning("Ya se han asignado {$horasYaAsignadasEnDia} horas para la materia {$distributivo->asignatura->nombre} el {$dia}");
-            return [];
-        }
-
-        $horasMaximasPermitidas = 3 - $horasYaAsignadasEnDia;
-        $horasAAsignar = min($horas, $horasMaximasPermitidas);
-
-        for ($i = 0; $i <= count($horariosDisponibles) - $horasAAsignar; $i++) {
-            $bloque = [];
-            $esConsecutivo = true;
-
-            for ($j = 0; $j < $horasAAsignar; $j++) {
-                $horarioActual = $horariosDisponibles[$i + $j];
-
-                if (!$this->estaHorarioDisponible($dia, $horarioActual['inicio'], $horarioActual['fin'], $horariosExistentes, $distributivo)) {
-                    $esConsecutivo = false;
-                    break;
-                }
-
-                if ($j > 0) {
-                    $horarioAnterior = $horariosDisponibles[$i + $j - 1];
-                    if ($horarioAnterior['fin'] !== $horarioActual['inicio']) {
-                        $esConsecutivo = false;
-                        break;
-                    }
-                }
-
-                $bloque[] = $horarioActual;
-            }
-
-            if ($esConsecutivo && count($bloque) === $horasAAsignar) {
-                return $bloque; // Relajamos la consecutividad con horarios existentes
-            }
-        }
-
-        if ($horasAAsignar === 1 && $horasYaAsignadasEnDia === 0) {
-            foreach ($horariosDisponibles as $horario) {
-                if ($this->estaHorarioDisponible($dia, $horario['inicio'], $horario['fin'], $horariosExistentes, $distributivo)) {
-                    return [$horario];
-                }
-            }
-        }
-
-        return [];
-    }
-
-    private function contarHorasAsignadasEnDia(string $dia, int $distributivoId, array $horariosExistentes): int
-    {
-        $horasTotal = 0;
-
-        foreach ($horariosExistentes as $horario) {
-            if (
-                $horario['dia_semana'] === $dia &&
-                isset($horario['distributivo_academico_id']) &&
-                $horario['distributivo_academico_id'] === $distributivoId
-            ) {
-                $inicio = Carbon::parse($horario['hora_inicio']);
-                $fin = Carbon::parse($horario['hora_fin']);
-                $horasTotal += $fin->diffInHours($inicio);
-            }
-        }
-
-        return $horasTotal;
-    }
-
-    private function esConsecutivoConHorariosExistentes(string $dia, array $nuevosHorarios, int $distributivoId, array $horariosExistentes): bool
-    {
-        // Relajamos la restricción de consecutividad para facilitar la asignación
-        return true;
-    }
-
-    private function estaHorarioDisponible(string $dia, string $inicio, string $fin, array $horariosExistentes, DistributivoAcademico $distributivo): bool
-    {
-        $docenteId = $distributivo->docente_id;
-
-        foreach ($horariosExistentes as $horario) {
-            if ($horario['dia_semana'] === $dia) {
-                $horarioDocenteId = null;
-                if (isset($horario['distributivo_academico_id'])) {
-                    $otroDistributivo = DistributivoAcademico::find($horario['distributivo_academico_id']);
-                    if ($otroDistributivo) {
-                        $horarioDocenteId = $otroDistributivo->docente_id;
-                    }
-                }
-
-                if ($horarioDocenteId === $docenteId) {
+                if ($otroDistributivo && $otroDistributivo->docente_id === $docenteId) {
                     if ($this->hayConflictoHorario($inicio, $fin, $horario['hora_inicio'], $horario['hora_fin'])) {
-                        Log::warning("Conflicto de horario para docente {$docenteId} el {$dia} de {$inicio} a {$fin} - ya tiene clase de {$horario['hora_inicio']} a {$horario['hora_fin']} en distributivo {$horario['distributivo_academico_id']}");
                         return false;
                     }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private function estaAulaDisponible(Aula $aula, string $dia, string $inicio, string $fin, array $horariosExistentes, array $horariosGenerados): bool
+    {
+        $todosLosHorarios = array_merge($horariosExistentes, $horariosGenerados);
+
+        foreach ($todosLosHorarios as $horario) {
+            if (
+                $horario['dia_semana'] === $dia &&
+                isset($horario['aula']) &&
+                $horario['aula'] === $aula->codigo
+            ) {
+                if ($this->hayConflictoHorario($inicio, $fin, $horario['hora_inicio'], $horario['hora_fin'])) {
+                    return false;
                 }
             }
         }
@@ -816,70 +582,30 @@ class HorarioGeneratorService
         return ($inicio1 < $fin2) && ($fin1 > $inicio2);
     }
 
-    private function seleccionarAula($campus, string $dia, string $inicio, string $fin, int $distributivoId): ?Aula
+    private function obtenerHorariosPorJornada(string $jornada): array
     {
-        $aula = Aula::where('campus_id', $campus->id)
-            ->where('activa', true)
-            ->whereNotExists(function ($query) use ($dia, $inicio, $fin) {
-                $query->select(DB::raw(1))
-                    ->from('horarios')
-                    ->whereRaw('horarios.aula = aulas.codigo')
-                    ->where('dia_semana', $dia)
-                    ->where(function ($q) use ($inicio, $fin) {
-                        $q->where('hora_inicio', '<', $fin)
-                            ->where('hora_fin', '>', $inicio);
-                    });
-            })
-            ->first();
-
-        if (!$aula) {
-            Log::warning("No se encontró aula disponible para distributivo {$distributivoId} en {$dia} de {$inicio} a {$fin} en campus {$campus->id}. Aulas activas totales: " . Aula::where('campus_id', $campus->id)->where('activa', true)->count());
-        }
-
-        return $aula;
+        return match ($jornada) {
+            'matutina' => $this->horariosMatutina,
+            'vespertina' => $this->horariosVespertina,
+            'nocturna' => $this->horariosNocturna,
+            'intensiva' => $this->horariosIntensiva,
+            default => throw new \Exception("Jornada no válida: {$jornada}")
+        };
     }
 
-    private function validarReglasDocente(array $nuevoHorario, array $horariosExistentes, DistributivoAcademico $distributivo): bool
+    private function validarAulasDisponibles(Collection $distributivos, array $campusIds): void
     {
-        $dia = $nuevoHorario['dia_semana'];
-        $distributivoId = $distributivo->id;
-        $docenteId = $distributivo->docente_id;
+        $campusIdsDistributivos = $distributivos->pluck('campus_id')->unique();
 
-        foreach ($horariosExistentes as $horario) {
-            if ($horario['dia_semana'] === $dia) {
-                $horarioDocenteId = null;
-                if (isset($horario['distributivo_academico_id'])) {
-                    $otroDistributivo = DistributivoAcademico::find($horario['distributivo_academico_id']);
-                    if ($otroDistributivo) {
-                        $horarioDocenteId = $otroDistributivo->docente_id;
-                    }
-                }
+        foreach ($campusIdsDistributivos as $campusId) {
+            $aulasActivas = Aula::where('campus_id', $campusId)
+                ->where('activa', true)
+                ->count();
 
-                if (
-                    $horarioDocenteId === $docenteId &&
-                    isset($horario['distributivo_academico_id']) &&
-                    $horario['distributivo_academico_id'] !== $distributivoId
-                ) {
-                    if ($this->hayConflictoHorario($nuevoHorario['hora_inicio'], $nuevoHorario['hora_fin'], $horario['hora_inicio'], $horario['hora_fin'])) {
-                        Log::warning("VALIDACIÓN FALLIDA: Conflicto de horario con otra materia del mismo docente {$docenteId} en el día {$dia}");
-                        return false;
-                    }
-                }
+            if ($aulasActivas === 0) {
+                throw new \Exception("No hay aulas activas disponibles en el campus ID: {$campusId}");
             }
         }
-
-        $horasEnDiaPorMateria = $this->contarHorasAsignadasEnDia($dia, $distributivoId, $horariosExistentes);
-
-        $inicioNuevo = Carbon::parse($nuevoHorario['hora_inicio']);
-        $finNuevo = Carbon::parse($nuevoHorario['hora_fin']);
-        $horasNuevo = $finNuevo->diffInHours($inicioNuevo);
-
-        if (($horasEnDiaPorMateria + $horasNuevo) > 3) {
-            Log::warning("VALIDACIÓN FALLIDA: Excede límite de 3 horas por materia en el día {$dia} para distributivo {$distributivoId}. Horas existentes: {$horasEnDiaPorMateria}, Horas nuevas: {$horasNuevo}");
-            return false;
-        }
-
-        return true;
     }
 
     private function limpiarHorariosExistentes(int $periodoAcademicoId, array $campusIds = []): void

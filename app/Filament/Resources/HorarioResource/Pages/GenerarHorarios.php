@@ -12,6 +12,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Pages\Page;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
+use App\Models\Carrera;
 
 class GenerarHorarios extends Page
 {
@@ -45,30 +46,33 @@ class GenerarHorarios extends Page
                             ->required()
                             ->reactive(),
 
-                        Forms\Components\CheckboxList::make('campus_ids')
-                            ->label('Campus (dejar vacío para todos)')
+                        Forms\Components\Select::make('campus_id')
+                            ->label('Campus')
                             ->options(Campus::where('activo', true)->pluck('nombre', 'id'))
-                            ->columns(2),
+                            ->required()
+                            ->reactive()
+                            ->afterStateUpdated(fn(callable $set) => $set('carrera_id', null)),
+
+                        Forms\Components\Select::make('carrera_id')
+                            ->label('Carrera')
+                            ->options(function (callable $get) {
+                                $campusId = $get('campus_id');
+                                if (!$campusId) {
+                                    return [];
+                                }
+                                // Si la relación es uno a muchos:
+                                return Carrera::where('campus_id', $campusId)->pluck('nombre', 'id');
+                                // Si la relación es muchos a muchos:
+                                // return \App\Models\Campus::find($campusId)?->carreras()->pluck('nombre', 'id') ?? [];
+                            })
+                            ->required()
+                            ->disabled(fn(callable $get) => !$get('campus_id'))
+                            ->reactive(),
 
                         Forms\Components\Toggle::make('limpiar_existentes')
                             ->label('Limpiar horarios existentes antes de generar')
                             ->default(true)
                             ->helperText('Si está activado, eliminará todos los horarios existentes del período seleccionado antes de generar nuevos.'),
-
-                        Forms\Components\Placeholder::make('info')
-                            ->label('Información')
-                            ->content('
-                                <div class="text-sm text-gray-600">
-                                    <h4 class="font-semibold mb-2">Reglas de generación:</h4>
-                                    <ul class="list-disc list-inside space-y-1">
-                                        <li>Un docente no puede dictar más de 2 horas el mismo día</li>
-                                        <li>Las horas del mismo día deben ser consecutivas</li>
-                                        <li>Se respetan las jornadas definidas en el distributivo</li>
-                                        <li>Se asignan aulas disponibles automáticamente</li>
-                                        <li>Se evitan conflictos de horarios entre docentes y aulas</li>
-                                    </ul>
-                                </div>
-                            '),
                     ]),
             ])
             ->statePath('data');

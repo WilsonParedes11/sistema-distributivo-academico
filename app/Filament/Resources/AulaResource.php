@@ -12,6 +12,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Models\Carrera;
 
 class AulaResource extends Resource
 {
@@ -42,12 +43,12 @@ class AulaResource extends Resource
                         if (!$campusId) {
                             return [];
                         }
-                        return \App\Models\Carrera::where('campus_id', $campusId)->pluck('nombre', 'id');
+                        return Carrera::where('campus_id', $campusId)->pluck('nombre', 'id');
                     })
                     ->required()
                     ->searchable()
                     ->reactive()
-                    ->disabled(fn (callable $get) => !$get('campus_id')),
+                    ->disabled(fn(callable $get) => !$get('campus_id')),
                 Forms\Components\TextInput::make('edificio')
                     ->maxLength(255)
                     ->default(null),
@@ -81,6 +82,10 @@ class AulaResource extends Resource
                     ->label('Campus')
                     ->searchable()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('carrera.nombre')
+                    ->label('Carrera')
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('edificio')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('capacidad')
@@ -90,6 +95,7 @@ class AulaResource extends Resource
                 Tables\Columns\IconColumn::make('activa')
                     ->boolean(),
                 Tables\Columns\TextColumn::make('recursos_disponibles')
+                    ->toggleable(isToggledHiddenByDefault: true)
                     ->limit(100),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()

@@ -60,7 +60,7 @@ class HorarioGeneratorService
     // Cache para aulas asignadas por semestre
     private array $aulasAsignadasPorSemestre = [];
 
-    public function generarHorarios(int $periodoAcademicoId, array $campusIds = []): array
+    public function generarHorarios(int $periodoAcademicoId, ?int $campusId = null, ?int $carreraId = null): array
     {
         $resultado = [
             'exitosos' => 0,
@@ -76,29 +76,44 @@ class HorarioGeneratorService
                 throw new \Exception("El período académico con ID {$periodoAcademicoId} no existe");
             }
 
-            // Obtener distributivos del período
+            // Obtener distributivos del período con filtros específicos
             $query = DistributivoAcademico::where('periodo_academico_id', $periodoAcademicoId)
                 ->where('activo', true)
                 ->with(['docente.user', 'asignatura', 'carrera', 'campus']);
 
-            if (!empty($campusIds)) {
-                $query->whereIn('campus_id', $campusIds);
+            // Aplicar filtros opcionales
+            if ($campusId) {
+                $query->where('campus_id', $campusId);
+                Log::info("Filtrando por campus ID: {$campusId}");
+            }
+
+            if ($carreraId) {
+                $query->where('carrera_id', $carreraId);
+                Log::info("Filtrando por carrera ID: {$carreraId}");
             }
 
             $distributivos = $query->get();
 
             if ($distributivos->isEmpty()) {
-                $resultado['mensajes'][] = "No se encontraron distributivos activos para el período académico";
+                $mensaje = "No se encontraron distributivos activos para el período académico";
+                if ($campusId)
+                    $mensaje .= " en el campus seleccionado";
+                if ($carreraId)
+                    $mensaje .= " en la carrera seleccionada";
+
+                $resultado['mensajes'][] = $mensaje;
                 return $resultado;
             }
 
+            Log::info("Encontrados " . $distributivos->count() . " distributivos para procesar");
+
             // Validar que hay aulas disponibles
-            $this->validarAulasDisponibles($distributivos, $campusIds);
+            $this->validarAulasDisponibles($distributivos, $campusId ? [$campusId] : []);
 
             // Limpiar horarios existentes del período
-            $this->limpiarHorariosExistentes($periodoAcademicoId, $campusIds);
+            $this->limpiarHorariosExistentes($periodoAcademicoId, $campusId, $carreraId);
 
-            // Inicializar cache de aulas por semestre
+            // Inicializar cache de aulas por semestre - CORREGIDO
             $this->inicializarAulasPorSemestre($distributivos);
 
             // Procesamiento ordenado por carga académica
@@ -117,20 +132,29 @@ class HorarioGeneratorService
 
     private function inicializarAulasPorSemestre(Collection $distributivos): void
     {
-        // Agrupar por campus, carrera, semestre y paralelo para primer semestre
-        $grupos = $distributivos->where('semestre', 1)->groupBy(function ($dist) {
+        // Agrupar por campus, carrera, semestre y paralelo - TODOS los semestres
+        $grupos = $distributivos->groupBy(function ($dist) {
             return "{$dist->campus_id}_{$dist->carrera_id}_{$dist->semestre}_{$dist->paralelo}";
         });
+
+        Log::info("Inicializando aulas para " . $grupos->count() . " grupos de semestre/paralelo");
 
         foreach ($grupos as $key => $distribsGrupo) {
             $primerDist = $distribsGrupo->first();
 
-            // Seleccionar una aula para todo el grupo de primer semestre
-            $aula = $this->seleccionarAulaParaSemestre($primerDist->campus, $primerDist->jornada);
+            // Seleccionar una aula específica para cada grupo de semestre/paralelo
+            $aula = $this->seleccionarAulaParaSemestre(
+                $primerDist->campus,
+                $primerDist->jornada,
+                $primerDist->semestre,
+                $primerDist->paralelo
+            );
 
             if ($aula) {
                 $this->aulasAsignadasPorSemestre[$key] = $aula;
-                Log::info("Aula {$aula->codigo} asignada para semestre 1, carrera {$primerDist->carrera->nombre}, paralelo {$primerDist->paralelo}");
+                Log::info("Aula {$aula->codigo} asignada para semestre {$primerDist->semestre}, carrera {$primerDist->carrera->nombre}, paralelo {$primerDist->paralelo}");
+            } else {
+                Log::warning("No se pudo asignar aula para semestre {$primerDist->semestre}, carrera {$primerDist->carrera->nombre}, paralelo {$primerDist->paralelo}");
             }
         }
     }
@@ -177,6 +201,8 @@ class HorarioGeneratorService
                         $resultado['conflictos'][] = [
                             'docente' => $docenteData['docente']->user->nombre_completo,
                             'asignatura' => $distributivo->asignatura->nombre,
+                            'semestre' => $distributivo->semestre,
+                            'paralelo' => $distributivo->paralelo,
                             'razon' => 'No se pudieron generar horarios para este distributivo con la carga actual'
                         ];
                         continue;
@@ -195,7 +221,7 @@ class HorarioGeneratorService
                     }
 
                     if ($horariosValidosCreados > 0) {
-                        $resultado['mensajes'][] = "Horarios generados para {$docenteData['docente']->user->nombre_completo} - {$distributivo->asignatura->nombre}: {$horariosValidosCreados} horarios";
+                        $resultado['mensajes'][] = "Horarios generados para {$docenteData['docente']->user->nombre_completo} - {$distributivo->asignatura->nombre} (Sem.{$distributivo->semestre}, Par.{$distributivo->paralelo}): {$horariosValidosCreados} horarios";
                     }
 
                 } catch (\Exception $e) {
@@ -203,6 +229,8 @@ class HorarioGeneratorService
                     $resultado['conflictos'][] = [
                         'docente' => $docenteData['docente']->user->nombre_completo,
                         'asignatura' => $distributivo->asignatura->nombre,
+                        'semestre' => $distributivo->semestre,
+                        'paralelo' => $distributivo->paralelo,
                         'razon' => $e->getMessage()
                     ];
                     Log::error("Error procesando distributivo {$distributivo->id}: " . $e->getMessage());
@@ -463,27 +491,68 @@ class HorarioGeneratorService
 
     private function obtenerAulaParaDistributivo(DistributivoAcademico $distributivo): ?Aula
     {
-        // Si es primer semestre, usar el aula pre-asignada
-        if ($distributivo->semestre == 1) {
-            $key = "{$distributivo->campus_id}_{$distributivo->carrera_id}_{$distributivo->semestre}_{$distributivo->paralelo}";
-            return $this->aulasAsignadasPorSemestre[$key] ?? null;
-        }
+        // Usar el aula pre-asignada para este grupo específico de semestre/paralelo
+        $key = "{$distributivo->campus_id}_{$distributivo->carrera_id}_{$distributivo->semestre}_{$distributivo->paralelo}";
 
-        // Para otros semestres, seleccionar aula disponible
-        return $this->seleccionarAulaParaSemestre($distributivo->campus, $distributivo->jornada);
-    }
-
-    private function seleccionarAulaParaSemestre($campus, string $jornada): ?Aula
-    {
-        $aula = Aula::where('campus_id', $campus->id)
-            ->where('activa', true)
-            ->first();
+        $aula = $this->aulasAsignadasPorSemestre[$key] ?? null;
 
         if (!$aula) {
-            Log::warning("No se encontró aula disponible en campus {$campus->id} para la jornada {$jornada}");
+            Log::warning("No se encontró aula pre-asignada para {$key}, buscando aula disponible");
+            // Fallback: buscar cualquier aula disponible
+            $aula = $this->seleccionarAulaParaSemestre(
+                $distributivo->campus,
+                $distributivo->jornada,
+                $distributivo->semestre,
+                $distributivo->paralelo
+            );
         }
 
         return $aula;
+    }
+
+    private function seleccionarAulaParaSemestre($campus, string $jornada, int $semestre, string $paralelo): ?Aula
+    {
+        // Obtener todas las aulas activas del campus
+        $aulasDisponibles = Aula::where('campus_id', $campus->id)
+            ->where('activa', true)
+            ->get();
+
+        if ($aulasDisponibles->isEmpty()) {
+            Log::warning("No se encontraron aulas disponibles en campus {$campus->id}");
+            return null;
+        }
+
+        // Obtener aulas ya asignadas para evitar duplicados en el mismo horario
+        $aulasYaAsignadas = collect($this->aulasAsignadasPorSemestre)->pluck('id')->toArray();
+
+        // Priorizar aulas no asignadas
+        $aulaNoAsignada = $aulasDisponibles->whereNotIn('id', $aulasYaAsignadas)->first();
+
+        if ($aulaNoAsignada) {
+            Log::info("Asignando aula nueva {$aulaNoAsignada->codigo} para semestre {$semestre}, paralelo {$paralelo}");
+            return $aulaNoAsignada;
+        }
+
+        // Si no hay aulas nuevas disponibles, usar cualquiera disponible
+        // pero verificar que no cause conflictos de horario
+        foreach ($aulasDisponibles as $aula) {
+            if ($this->puedeUsarAula($aula, $jornada)) {
+                Log::info("Reutilizando aula {$aula->codigo} para semestre {$semestre}, paralelo {$paralelo}");
+                return $aula;
+            }
+        }
+
+        Log::warning("No se encontró aula adecuada para semestre {$semestre}, paralelo {$paralelo} en jornada {$jornada}");
+        return $aulasDisponibles->first(); // Última opción
+    }
+
+    private function puedeUsarAula(Aula $aula, string $jornada): bool
+    {
+        // Aquí podrías implementar lógica adicional para verificar
+        // si el aula es adecuada para la jornada específica
+        // Por ejemplo, algunas aulas podrían estar reservadas para ciertas jornadas
+
+        return true; // Por ahora, cualquier aula puede usarse en cualquier jornada
     }
 
     private function encontrarDiasDisponiblesParaDocente(DistributivoAcademico $distributivo, array $diasValidos, array $horariosExistentes): array
@@ -529,7 +598,8 @@ class HorarioGeneratorService
 
         Log::info("Días disponibles para docente {$distributivo->docente->user->nombre_completo} - {$distributivo->asignatura->nombre}: " .
             implode(', ', array_map(function ($d) {
-                return $d['dia'] . '(' . $d['disponibilidad'] . ')'; }, $diasConDisponibilidad)));
+                return $d['dia'] . '(' . $d['disponibilidad'] . ')';
+            }, $diasConDisponibilidad)));
 
         return array_values($diasConDisponibilidad);
     }
@@ -605,23 +675,36 @@ class HorarioGeneratorService
             if ($aulasActivas === 0) {
                 throw new \Exception("No hay aulas activas disponibles en el campus ID: {$campusId}");
             }
+
+            Log::info("Campus {$campusId}: {$aulasActivas} aulas activas disponibles");
         }
     }
 
-    private function limpiarHorariosExistentes(int $periodoAcademicoId, array $campusIds = []): void
+    private function limpiarHorariosExistentes(int $periodoAcademicoId, ?int $campusId = null, ?int $carreraId = null): void
     {
         try {
-            $query = Horario::whereHas('distributivoAcademico', function ($q) use ($periodoAcademicoId, $campusIds) {
+            $query = Horario::whereHas('distributivoAcademico', function ($q) use ($periodoAcademicoId, $campusId, $carreraId) {
                 $q->where('periodo_academico_id', $periodoAcademicoId);
-                if (!empty($campusIds)) {
-                    $q->whereIn('campus_id', $campusIds);
+
+                if ($campusId) {
+                    $q->where('campus_id', $campusId);
+                }
+
+                if ($carreraId) {
+                    $q->where('carrera_id', $carreraId);
                 }
             });
 
             $eliminados = $query->count();
             $query->delete();
 
-            Log::info("Eliminados {$eliminados} horarios existentes para el período {$periodoAcademicoId}");
+            $mensaje = "Eliminados {$eliminados} horarios existentes para el período {$periodoAcademicoId}";
+            if ($campusId)
+                $mensaje .= " en campus {$campusId}";
+            if ($carreraId)
+                $mensaje .= " en carrera {$carreraId}";
+
+            Log::info($mensaje);
         } catch (\Exception $e) {
             Log::error("Error limpiando horarios existentes: " . $e->getMessage());
             throw new \Exception("Error al limpiar horarios existentes: " . $e->getMessage());

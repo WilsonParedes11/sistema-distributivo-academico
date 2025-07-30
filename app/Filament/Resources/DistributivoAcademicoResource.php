@@ -81,36 +81,9 @@ class DistributivoAcademicoResource extends Resource
                     ])
                     ->required()
                     ->reactive(),
-                Forms\Components\Select::make('paralelo')
-                    ->label('Paralelo (Aula)')
-                    ->options(function (callable $get) {
-                        $carreraId = $get('carrera_id');
-                        $semestre = $get('semestre');
-                        if (!$carreraId || !$semestre)
-                            return [];
-                        // Buscar aulas disponibles para la carrera y semestre
-                        $aulas = Aula::where('carrera_id', $carreraId)->get();
-                        $paralelos = [];
-                        foreach ($aulas as $aula) {
-                            // Validar que el aula no esté ocupada en ese semestre
-                            $ocupado = DistributivoAcademico::where('carrera_id', $carreraId)
-                                ->where('semestre', $semestre)
-                                ->where('paralelo', $aula->codigo)
-                                ->where('activo', true)
-                                ->exists();
-                            if (!$ocupado) {
-                                $paralelos[$aula->codigo] = $aula->codigo . ' - ' . ($aula->nombre ?? $aula->paralelo ?? '');
-                            }
-                        }
-                        return $paralelos;
-                    })
+                Forms\Components\TextInput::make('paralelo')
                     ->required()
-                    ->searchable()
-                    ->reactive()
-                    ->disabled(fn(callable $get) => !$get('carrera_id') || !$get('semestre'))
-                    ->validationMessages([
-                        'required' => 'Debe seleccionar un aula/paralelo disponible para este semestre.',
-                    ]),
+                    ->maxLength(255),
                 Forms\Components\Select::make('jornada')
                     ->options([
                         'matutina' => 'Matutina',

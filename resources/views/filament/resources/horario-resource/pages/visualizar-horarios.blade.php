@@ -45,9 +45,23 @@
                             @php
                                 $horariosPorDia = $this->getHorariosPorDia();
                                 $horariosDisponibles = $this->getHorariosDisponibles();
+                                // Filtrar los rangos horarios para mostrar solo los que tienen horarios generados
+                                $horasOcupadas = $horarios->map(function($h) {
+                                    return [
+                                        \Carbon\Carbon::parse($h->hora_inicio)->format('H:i'),
+                                        \Carbon\Carbon::parse($h->hora_fin)->format('H:i')
+                                    ];
+                                });
+                                $minHora = $horasOcupadas->min(fn($h) => $h[0]) ?? null;
+                                $maxHora = $horasOcupadas->max(fn($h) => $h[1]) ?? null;
+                                $rangosFiltrados = collect($horariosDisponibles)->filter(function($rango) use ($minHora, $maxHora) {
+                                    if (!$minHora || !$maxHora) return false;
+                                    [$inicio, $fin] = explode('-', $rango);
+                                    return ($fin > $minHora && $inicio < $maxHora);
+                                });
                             @endphp
 
-                            @foreach($horariosDisponibles as $rangoHora)
+                            @foreach($rangosFiltrados as $rangoHora)
                                 <tr class="hover:bg-gray-50">
                                     <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">
                                         <div class="text-center">

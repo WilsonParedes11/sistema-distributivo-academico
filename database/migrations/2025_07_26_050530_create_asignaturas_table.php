@@ -13,10 +13,10 @@ return new class extends Migration
             $table->string('nombre');
             $table->string('codigo')->unique();
             $table->foreignId('carrera_id')->constrained('carreras');
-            $table->integer('semestre');
-            $table->integer('horas_semanales');
-            $table->integer('horas_practicas')->default(0);
-            $table->integer('creditos');
+            // $table->integer('semestre');
+            // $table->integer('horas_semanales');
+            // $table->integer('horas_practicas')->default(0);
+            $table->integer('creditos')->nullable();
             $table->text('descripcion')->nullable();
             $table->boolean('activa')->default(true);
             $table->timestamps();

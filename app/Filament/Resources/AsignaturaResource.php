@@ -35,16 +35,16 @@ class AsignaturaResource extends Resource
                     ->options(Carrera::all()->pluck('nombre', 'id'))
                     ->searchable()
                     ->preload()                    ->required(),
-                Forms\Components\TextInput::make('semestre')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\TextInput::make('horas_semanales')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\TextInput::make('horas_practicas')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
+                // Forms\Components\TextInput::make('semestre')
+                //     ->required()
+                //     ->numeric(),
+                // Forms\Components\TextInput::make('horas_semanales')
+                //     ->required()
+                //     ->numeric(),
+                // Forms\Components\TextInput::make('horas_practicas')
+                //     ->required()
+                //     ->numeric()
+                //     ->default(0),
                 Forms\Components\TextInput::make('creditos')
                     ->required()
                     ->numeric(),
@@ -67,15 +67,15 @@ class AsignaturaResource extends Resource
                     ->label('Carrera')
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('semestre')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('horas_semanales')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('horas_practicas')
-                    ->numeric()
-                    ->sortable(),
+                // Tables\Columns\TextColumn::make('semestre')
+                //     ->numeric()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('horas_semanales')
+                //     ->numeric()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('horas_practicas')
+                //     ->numeric()
+                //     ->sortable(),
                 Tables\Columns\TextColumn::make('creditos')
                     ->numeric()
                     ->sortable(),

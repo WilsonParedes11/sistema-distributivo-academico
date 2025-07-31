@@ -1,5 +1,4 @@
 <?php
-// database/seeders/CarreraSeeder.php
 
 namespace Database\Seeders;
 
@@ -18,15 +17,6 @@ class CarreraSeeder extends Seeder
                 'tipo' => 'tecnica',
                 'duracion_semestres' => 4,
                 'descripcion' => 'Carrera técnica enfocada en el desarrollo de aplicaciones y sistemas de software',
-                'activa' => true,
-                'campus_codigo' => '23ABRIL'
-            ],
-            [
-                'nombre' => 'TECNOLOGÍA SUPERIOR EN DESARROLLO DE SOFTWARE',
-                'codigo' => 'TSDS',
-                'tipo' => 'tecnologica',
-                'duracion_semestres' => 5,
-                'descripcion' => 'Carrera tecnológica superior en desarrollo de software con énfasis en tecnologías avanzadas',
                 'activa' => true,
                 'campus_codigo' => '23ABRIL'
             ],

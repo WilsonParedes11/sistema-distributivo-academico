@@ -23,15 +23,8 @@
         <x-filament-panels::form wire:submit="generar">
             {{ $this->form }}
 
-            <!-- Botón explícito para enviar el formulario -->
-            <div class="mt-4">
-                <button type="submit" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
-                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M13.5 4.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 10a5 5 0 10-5-5 5 5 0 005 5zm-5 2a2 2 0 100 4 2 2 0 000-4z"/>
-                    </svg>
-                    Generar Horarios
-                </button>
-            </div>
+            <!-- Renderizar las acciones del formulario definidas en getFormActions() -->
+            <x-filament-panels::form.actions :actions="$this->getFormActions()" class="mt-4" />
         </x-filament-panels::form>
     </div>
 </x-filament-panels::page>

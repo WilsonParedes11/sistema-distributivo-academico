@@ -69,7 +69,6 @@ class EstudianteResource extends Resource
                     ->options([
                         'activo' => 'Activo',
                         'inactivo' => 'Inactivo',
-                        'graduado' => 'Graduado',
                         'retirado' => 'Retirado',
                     ])
                     ->required(),

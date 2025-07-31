@@ -17,7 +17,7 @@ return new class extends Migration {
             $table->string('paralelo', 2);
             $table->enum('jornada', ['matutina', 'vespertina', 'nocturna', 'intensiva']);
             $table->date('fecha_ingreso');
-            $table->enum('estado', ['activo', 'inactivo', 'graduado', 'retirado'])->default('activo');
+            $table->enum('estado', ['activo', 'inactivo', 'retirado'])->default('activo');
             $table->timestamps();
             $table->softDeletes();
 

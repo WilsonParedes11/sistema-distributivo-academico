@@ -20,6 +20,11 @@ class AsignaturaResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasRole('administrador');
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -34,7 +39,7 @@ class AsignaturaResource extends Resource
                     ->label('Carrera')
                     ->options(Carrera::all()->pluck('nombre', 'id'))
                     ->searchable()
-                    ->preload()                    ->required(),
+                    ->preload()->required(),
                 // Forms\Components\TextInput::make('semestre')
                 //     ->required()
                 //     ->numeric(),

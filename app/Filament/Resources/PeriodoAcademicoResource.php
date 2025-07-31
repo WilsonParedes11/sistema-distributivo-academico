@@ -19,6 +19,11 @@ class PeriodoAcademicoResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-calendar-date-range';
 
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasRole('administrador');
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -56,7 +61,7 @@ class PeriodoAcademicoResource extends Resource
                     ->searchable(),
                 Tables\Columns\TextColumn::make('anio')
                     ->label('Año')
-                    ->formatStateUsing(fn ($state) => (string) $state)
+                    ->formatStateUsing(fn($state) => (string) $state)
                     ->sortable(),
                 Tables\Columns\TextColumn::make('periodo')
                     ->label('Período')

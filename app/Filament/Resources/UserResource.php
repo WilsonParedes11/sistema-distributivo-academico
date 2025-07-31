@@ -21,6 +21,11 @@ class UserResource extends Resource
 
     protected static ?string $pluralLabel = 'Usuarios';
 
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasRole('administrador');
+    }
+
     public static function form(Form $form): Form
     {
         return $form

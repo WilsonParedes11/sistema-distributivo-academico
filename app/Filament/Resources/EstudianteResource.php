@@ -22,6 +22,11 @@ class EstudianteResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
 
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasRole('administrador');
+    }
+
     public static function form(Form $form): Form
     {
         return $form

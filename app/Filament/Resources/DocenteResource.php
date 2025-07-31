@@ -20,6 +20,11 @@ class DocenteResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-user-plus';
 
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasRole('administrador');
+    }
+
     public static function form(Form $form): Form
     {
         return $form

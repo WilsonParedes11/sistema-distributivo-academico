@@ -69,8 +69,14 @@ class AdminPanelProvider extends PanelProvider
                 // Otros ítems de navegación...
                 \Filament\Navigation\NavigationItem::make('Mis Horarios')
                     ->icon('heroicon-o-calendar')
-                    ->url(fn() => HorarioResource::getUrl('mis-horarios'))
-                    ->visible(fn() => auth()->user()->hasRole('docente')),
+                    ->url(fn() =>
+                        \Filament\Facades\Filament::auth()->user()?->tipo_usuario === 'docente'
+                            ? HorarioResource::getUrl('mis-horarios')
+                            : (\Filament\Facades\Filament::auth()->user()?->tipo_usuario === 'estudiante'
+                                ? HorarioResource::getUrl('mis-horarios-estudiante')
+                                : '#')
+                    )
+                    ->visible(fn() => in_array(\Filament\Facades\Filament::auth()->user()?->tipo_usuario, ['docente', 'estudiante'])),
             ]);
     }
 }

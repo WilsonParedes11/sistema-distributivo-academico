@@ -208,6 +208,7 @@ class HorarioResource extends Resource
             'generar' => Pages\GenerarHorarios::route('/generar'),
             'visualizar' => Pages\VisualizarHorarios::route('/visualizar'),
             'mis-horarios' => Pages\VisualizarHorariosDocente::route('/mis-horarios'),
+            'mis-horarios-estudiante' => Pages\VisualizarHorariosEstudiante::route('/mis-horarios-estudiante'),
         ];
     }
 
@@ -224,7 +225,8 @@ class HorarioResource extends Resource
 
     public static function canAccess(array $parameters = []): bool
     {
-        return auth()->user()->hasPermissionTo('ver_horarios');
+        $user = auth()->user();
+        return $user->hasPermissionTo('ver_horarios') || $user->tipo_usuario === 'estudiante';
     }
 
     public static function canViewAny(): bool

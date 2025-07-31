@@ -69,6 +69,8 @@ class DocenteResource extends Resource
                     ->searchable(['nombres', 'apellidos'])
                     ->sortable(),
                 Tables\Columns\TextColumn::make('titulo_profesional')
+                    ->limit(40) // Muestra solo los primeros 40 caracteres
+                    ->tooltip(fn($record) => $record->titulo_profesional) // Muestra el texto completo al pasar el mouse
                     ->searchable(),
                 Tables\Columns\TextColumn::make('grado_ocupacional')
                     ->label('Grado Ocupacional')

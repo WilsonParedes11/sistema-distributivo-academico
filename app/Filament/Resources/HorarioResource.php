@@ -256,5 +256,10 @@ class HorarioResource extends Resource
     {
         return auth()->user()->hasPermissionTo('gestionar_horarios');
     }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()?->hasRole('administrador');
+    }
 }
 

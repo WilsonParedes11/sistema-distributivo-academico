@@ -14,6 +14,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class HorarioResource extends Resource
 {
@@ -206,6 +207,7 @@ class HorarioResource extends Resource
             'edit' => Pages\EditHorario::route('/{record}/edit'),
             'generar' => Pages\GenerarHorarios::route('/generar'),
             'visualizar' => Pages\VisualizarHorarios::route('/visualizar'),
+            'mis-horarios' => Pages\VisualizarHorariosDocente::route('/mis-horarios'),
         ];
     }
 
@@ -219,4 +221,40 @@ class HorarioResource extends Resource
             $query->where('periodo_academico_id', $periodoActivo->id);
         })->count();
     }
+
+    public static function canAccess(array $parameters = []): bool
+    {
+        return auth()->user()->hasPermissionTo('ver_horarios');
+    }
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()->hasPermissionTo('ver_horarios');
+    }
+
+    public static function canView(Model $record): bool
+    {
+        return auth()->user()->hasPermissionTo('ver_horarios');
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->user()->hasPermissionTo('gestionar_horarios');
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return auth()->user()->hasPermissionTo('gestionar_horarios');
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return auth()->user()->hasPermissionTo('gestionar_horarios');
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return auth()->user()->hasPermissionTo('gestionar_horarios');
+    }
 }
+

@@ -13,6 +13,8 @@ use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Collection;
+use Filament\Actions\Action;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class VisualizarHorarios extends Page
 {
@@ -245,6 +247,111 @@ class VisualizarHorarios extends Page
                 ->color('primary')
                 ->icon('heroicon-o-magnifying-glass')
                 ->action('consultarHorarios'),
+
+            Forms\Components\Actions\Action::make('imprimir')
+                ->label('Imprimir')
+                ->color('success')
+                ->icon('heroicon-o-printer')
+                ->visible(fn() => $this->horarios->isNotEmpty())
+                ->action('imprimirHorario'),
         ];
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('imprimir')
+                ->label('Imprimir Horario')
+                ->icon('heroicon-o-printer')
+                ->color('success')
+                ->visible(fn() => $this->horarios->isNotEmpty())
+                ->action('imprimirHorario')
+                ->openUrlInNewTab(),
+        ];
+    }
+
+    public function imprimirHorario()
+    {
+        if ($this->horarios->isEmpty()) {
+            $this->notify('warning', 'No hay horarios para imprimir');
+            return;
+        }
+
+        $data = $this->form->getState();
+        $horariosPorDia = $this->getHorariosPorDia();
+        $horariosDisponibles = $this->getHorariosDisponibles();
+
+        // Obtener información adicional para el PDF
+        $titulo = $this->obtenerTituloHorario($data);
+        $subtitulo = $this->obtenerSubtituloHorario($data);
+
+        // Filtrar rangos horarios
+        $horasOcupadas = $this->horarios->map(function ($h) {
+            return [
+                \Carbon\Carbon::parse($h->hora_inicio)->format('H:i'),
+                \Carbon\Carbon::parse($h->hora_fin)->format('H:i')
+            ];
+        });
+
+        $minHora = $horasOcupadas->min(fn($h) => $h[0]) ?? null;
+        $maxHora = $horasOcupadas->max(fn($h) => $h[1]) ?? null;
+
+        $rangosFiltrados = collect($horariosDisponibles)->filter(function ($rango) use ($minHora, $maxHora) {
+            if (!$minHora || !$maxHora)
+                return false;
+            [$inicio, $fin] = explode('-', $rango);
+            return ($fin > $minHora && $inicio < $maxHora);
+        });
+
+        $pdf = Pdf::loadView('horarios.imprimir', [
+            'horarios' => $this->horarios,
+            'horariosPorDia' => $horariosPorDia,
+            'rangosFiltrados' => $rangosFiltrados,
+            'titulo' => $titulo,
+            'subtitulo' => $subtitulo,
+            'tipoVista' => $this->tipoVista,
+            'data' => $data,
+            'fechaGeneracion' => now()->format('d/m/Y H:i:s')
+        ])
+            ->setPaper('a4', 'landscape')
+            ->setOptions([
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true,
+                'defaultFont' => 'sans-serif'
+            ]);
+
+        return response()->streamDownload(
+            fn() => print ($pdf->output()),
+            'horario-' . strtolower(str_replace(' ', '-', $titulo)) . '.pdf'
+        );
+    }
+
+    private function obtenerTituloHorario(array $data): string
+    {
+        return match ($this->tipoVista) {
+            'carrera' => $data['carrera_id']
+            ? Carrera::find($data['carrera_id'])->nombre . ' - ' . $data['semestre'] . $data['paralelo']
+            : 'Horario por Carrera',
+            'docente' => $data['docente_id']
+            ? Docente::find($data['docente_id'])->user->nombre_completo
+            : 'Horario por Docente',
+            'aula' => 'Horario por Aula',
+            'campus' => 'Horario por Campus',
+            default => 'Horario Académico'
+        };
+    }
+
+    private function obtenerSubtituloHorario(array $data): string
+    {
+        $periodo = $data['periodo_academico_id']
+            ? PeriodoAcademico::find($data['periodo_academico_id'])->nombre
+            : '';
+
+        $campus = '';
+        if (isset($data['campus_id']) && $data['campus_id']) {
+            $campus = ' - ' . Campus::find($data['campus_id'])->nombre;
+        }
+
+        return $periodo . $campus;
     }
 }

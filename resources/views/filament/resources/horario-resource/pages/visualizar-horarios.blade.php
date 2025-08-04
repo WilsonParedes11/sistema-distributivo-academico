@@ -45,20 +45,24 @@
                             @php
                                 $horariosPorDia = $this->getHorariosPorDia();
                                 $horariosDisponibles = $this->getHorariosDisponibles();
-                                // Filtrar los rangos horarios para mostrar solo los que tienen horarios generados
-                                $horasOcupadas = $horarios->map(function($h) {
-                                    return [
-                                        \Carbon\Carbon::parse($h->hora_inicio)->format('H:i'),
-                                        \Carbon\Carbon::parse($h->hora_fin)->format('H:i')
-                                    ];
-                                });
-                                $minHora = $horasOcupadas->min(fn($h) => $h[0]) ?? null;
-                                $maxHora = $horasOcupadas->max(fn($h) => $h[1]) ?? null;
-                                $rangosFiltrados = collect($horariosDisponibles)->filter(function($rango) use ($minHora, $maxHora) {
-                                    if (!$minHora || !$maxHora) return false;
-                                    [$inicio, $fin] = explode('-', $rango);
-                                    return ($fin > $minHora && $inicio < $maxHora);
-                                });
+                                // Si no hay horarios generados, mostrar todos los rangos disponibles
+                                if ($horarios->isEmpty()) {
+                                    $rangosFiltrados = collect($horariosDisponibles);
+                                } else {
+                                    $horasOcupadas = $horarios->map(function($h) {
+                                        return [
+                                            \Carbon\Carbon::parse($h->hora_inicio)->format('H:i'),
+                                            \Carbon\Carbon::parse($h->hora_fin)->format('H:i')
+                                        ];
+                                    });
+                                    $minHora = $horasOcupadas->min(fn($h) => $h[0]) ?? null;
+                                    $maxHora = $horasOcupadas->max(fn($h) => $h[1]) ?? null;
+                                    $rangosFiltrados = collect($horariosDisponibles)->filter(function($rango) use ($minHora, $maxHora) {
+                                        if (!$minHora || !$maxHora) return false;
+                                        [$inicio, $fin] = explode('-', $rango);
+                                        return ($fin > $minHora && $inicio < $maxHora);
+                                    });
+                                }
                             @endphp
 
                             @foreach($rangosFiltrados as $rangoHora)

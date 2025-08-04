@@ -96,23 +96,31 @@ class VisualizarHorariosDocente extends Page
 
     public function getHorariosDisponibles(): array
     {
-        return [
-            '07:00-08:00',
-            '08:00-09:00',
-            '09:00-10:00',
-            '10:00-11:00',
-            '11:00-12:00',
-            '12:00-13:00',
-            '14:00-15:00',
-            '15:00-16:00',
-            '16:00-17:00',
-            '17:00-18:00',
-            '18:00-19:00',
-            '19:00-20:00',
-            '20:00-21:00',
-            '21:00-22:00',
-            '22:00-23:00'
-        ];
+        // Determinar la jornada del docente según los horarios consultados
+        $jornada = null;
+        if ($this->horarios->isNotEmpty()) {
+            $jornada = $this->horarios->first()->distributivoAcademico->jornada ?? null;
+        }
+        // Si no hay horarios, intentar obtener jornada desde el primer distributivo del docente
+        if (!$jornada) {
+            $docente = \App\Models\Docente::where('user_id', \Auth::id())->first();
+            if ($docente) {
+                $distributivo = $docente->distributivos()->first();
+                $jornada = $distributivo?->jornada;
+            }
+        }
+        if (!$jornada) {
+            // Por defecto matutina
+            $jornada = 'matutina';
+        }
+        $jornadaModel = \App\Models\Jornada::nombre($jornada)->first();
+        if ($jornadaModel) {
+            return collect($jornadaModel->intervalos)->map(function($intervalo) {
+                return $intervalo['inicio'] . '-' . $intervalo['fin'];
+            })->toArray();
+        }
+        // Fallback: lista vacía
+        return [];
     }
 
     protected function getFormActions(): array

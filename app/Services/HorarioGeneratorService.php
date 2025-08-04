@@ -7,6 +7,7 @@ use App\Models\DistributivoAcademico;
 use App\Models\Horario;
 use App\Models\Aula;
 use App\Models\PeriodoAcademico;
+use App\Models\Jornada;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -17,42 +18,7 @@ class HorarioGeneratorService
     private array $diasSemana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
     private array $diasSemanaIntensiva = ['sabado'];
 
-    private array $horariosMatutina = [
-        ['inicio' => '07:00', 'fin' => '08:00'],
-        ['inicio' => '08:00', 'fin' => '09:00'],
-        ['inicio' => '09:00', 'fin' => '10:00'],
-        ['inicio' => '10:00', 'fin' => '11:00'],
-        ['inicio' => '11:00', 'fin' => '12:00'],
-        ['inicio' => '12:00', 'fin' => '13:00'],
-    ];
-
-    private array $horariosVespertina = [
-        ['inicio' => '14:00', 'fin' => '15:00'],
-        ['inicio' => '15:00', 'fin' => '16:00'],
-        ['inicio' => '16:00', 'fin' => '17:00'],
-        ['inicio' => '17:00', 'fin' => '18:00'],
-        ['inicio' => '18:00', 'fin' => '19:00'],
-        ['inicio' => '19:00', 'fin' => '20:00'],
-    ];
-
-    private array $horariosNocturna = [
-        ['inicio' => '18:00', 'fin' => '19:00'],
-        ['inicio' => '19:00', 'fin' => '20:00'],
-        ['inicio' => '20:00', 'fin' => '21:00'],
-        ['inicio' => '21:00', 'fin' => '22:00'],
-        ['inicio' => '22:00', 'fin' => '23:00'],
-    ];
-
-    private array $horariosIntensiva = [
-        ['inicio' => '08:00', 'fin' => '09:00'],
-        ['inicio' => '09:00', 'fin' => '10:00'],
-        ['inicio' => '10:00', 'fin' => '11:00'],
-        ['inicio' => '11:00', 'fin' => '12:00'],
-        ['inicio' => '14:00', 'fin' => '15:00'],
-        ['inicio' => '15:00', 'fin' => '16:00'],
-        ['inicio' => '16:00', 'fin' => '17:00'],
-        ['inicio' => '17:00', 'fin' => '18:00'],
-    ];
+    // ...existing code...
 
     // Máximo de horas por día para una materia
     private const MAX_HORAS_POR_DIA_MATERIA = 2;
@@ -652,15 +618,26 @@ class HorarioGeneratorService
         return ($inicio1 < $fin2) && ($fin1 > $inicio2);
     }
 
+
     private function obtenerHorariosPorJornada(string $jornada): array
     {
-        return match ($jornada) {
-            'matutina' => $this->horariosMatutina,
-            'vespertina' => $this->horariosVespertina,
-            'nocturna' => $this->horariosNocturna,
-            'intensiva' => $this->horariosIntensiva,
-            default => throw new \Exception("Jornada no válida: {$jornada}")
-        };
+        $config = Jornada::where('nombre', $jornada)->first();
+        if (!$config) {
+            throw new \Exception("No existe configuración para la jornada: {$jornada}");
+        }
+
+        $horarios = [];
+        $inicio = Carbon::parse($config->hora_inicio);
+
+        for ($i = 0; $i < $config->cantidad_horas; $i++) {
+            $fin = $inicio->copy()->addMinutes($config->duracion_hora);
+            $horarios[] = [
+                'inicio' => $inicio->format('H:i'),
+                'fin' => $fin->format('H:i')
+            ];
+            $inicio = $fin;
+        }
+        return $horarios;
     }
 
     private function validarAulasDisponibles(Collection $distributivos, array $campusIds): void

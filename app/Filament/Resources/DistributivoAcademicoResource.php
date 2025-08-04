@@ -15,6 +15,7 @@ use App\Models\Asignatura;
 use App\Models\Carrera;
 use App\Models\Campus;
 use App\Models\Aula;
+use App\Models\Jornada;
 
 class DistributivoAcademicoResource extends Resource
 {
@@ -90,12 +91,8 @@ class DistributivoAcademicoResource extends Resource
                     ->required()
                     ->maxLength(255),
                 Forms\Components\Select::make('jornada')
-                    ->options([
-                        'matutina' => 'Matutina',
-                        'vespertina' => 'Vespertina',
-                        'nocturna' => 'Nocturna',
-                        'intensiva' => 'Intensiva',
-                    ])
+                    ->label('Jornada')
+                    ->options(fn() => Jornada::all()->pluck('nombre', 'nombre')->map(fn($nombre) => ucfirst($nombre)))
                     ->required(),
                 Forms\Components\TextInput::make('horas_componente_practico')
                     ->required()
@@ -158,7 +155,7 @@ class DistributivoAcademicoResource extends Resource
                 Tables\Columns\TextColumn::make('paralelo')
                     ->label('Paralelo (Aula)')
                     ->formatStateUsing(function ($state) {
-                        $aula = \App\Models\Aula::where('codigo', $state)->first();
+                        $aula = Aula::where('codigo', $state)->first();
                         if ($aula) {
                             return $aula->codigo . ' - ' . ($aula->nombre ?? $aula->paralelo ?? '');
                         }

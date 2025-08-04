@@ -56,9 +56,9 @@ class VisualizarHorarios extends Page
                             ->label('Tipo de Vista')
                             ->options([
                                 'carrera' => 'Por Carrera/Curso',
-                                'docente' => 'Por Docente',
-                                'aula' => 'Por Aula',
-                                'campus' => 'Por Campus',
+                                // 'docente' => 'Por Docente',
+                                // 'aula' => 'Por Aula',
+                                // 'campus' => 'Por Campus',
                             ])
                             ->required()
                             ->reactive()

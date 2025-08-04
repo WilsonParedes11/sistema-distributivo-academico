@@ -144,8 +144,8 @@ class HorarioGeneratorService
             ];
         });
 
-        // Ordenar docentes por carga académica (menor a mayor)
-        $docentesOrdenados = $distributivosPorDocente->sortBy('carga_total');
+        // Ordenar docentes por carga académica (mayor a menor)
+        $docentesOrdenados = $distributivosPorDocente->sortByDesc('carga_total');
 
         $horariosGlobalesAsignados = []; // Todos los horarios asignados globalmente
 

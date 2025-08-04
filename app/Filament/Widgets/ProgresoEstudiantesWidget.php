@@ -12,7 +12,13 @@ class ProgresoEstudiantesWidget extends ChartWidget
         $user = \Filament\Facades\Filament::auth()->user();
         return $user instanceof \App\Models\User && method_exists($user, 'hasRole') && $user->hasRole('administrador');
     }
+
     protected static ?string $heading = 'Progreso de Estudiantes por Carrera';
+
+    protected int | string | array $columnSpan = 6;
+
+    protected static ?int $sort = 3;
+
     protected function getData(): array
     {
         $carreras = Carrera::activas()->get();
@@ -32,6 +38,7 @@ class ProgresoEstudiantesWidget extends ChartWidget
             'labels' => $labels,
         ];
     }
+
     protected function getType(): string
     {
         return 'bar';

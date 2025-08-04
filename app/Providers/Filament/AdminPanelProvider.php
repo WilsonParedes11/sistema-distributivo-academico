@@ -44,11 +44,11 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->widgets([
-                Widgets\AccountWidget::class,
+                //Widgets\AccountWidget::class,
                 \App\Filament\Widgets\EstadisticasGeneralesWidget::class,
                 \App\Filament\Widgets\HorasDocentesWidget::class,
                 \App\Filament\Widgets\ProgresoEstudiantesWidget::class,
-                \App\Filament\Widgets\AsignaturasPorCarreraWidget::class,
+                // \App\Filament\Widgets\AsignaturasPorCarreraWidget::class,
             ])
             ->userMenuItems([
                 'profile' => \Filament\Navigation\MenuItem::make()
@@ -75,10 +75,10 @@ class AdminPanelProvider extends PanelProvider
                     ->url(
                         fn() =>
                         \Filament\Facades\Filament::auth()->user()?->tipo_usuario === 'docente'
-                        ? HorarioResource::getUrl('mis-horarios')
-                        : (\Filament\Facades\Filament::auth()->user()?->tipo_usuario === 'estudiante'
-                            ? HorarioResource::getUrl('mis-horarios-estudiante')
-                            : '#')
+                            ? HorarioResource::getUrl('mis-horarios')
+                            : (\Filament\Facades\Filament::auth()->user()?->tipo_usuario === 'estudiante'
+                                ? HorarioResource::getUrl('mis-horarios-estudiante')
+                                : '#')
                     )
                     ->visible(fn() => in_array(\Filament\Facades\Filament::auth()->user()?->tipo_usuario, ['docente', 'estudiante'])),
             ]);

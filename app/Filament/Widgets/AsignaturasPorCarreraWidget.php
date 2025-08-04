@@ -11,7 +11,12 @@ class AsignaturasPorCarreraWidget extends ChartWidget
         $user = auth()->user();
         return $user instanceof \App\Models\User && method_exists($user, 'hasRole') && $user->hasRole('administrador');
     }
+
     protected static ?string $heading = 'Asignaturas por Carrera';
+
+    protected int | string | array $columnSpan = 6;
+
+    protected static ?int $sort = 4;
 
     protected function getData(): array
     {

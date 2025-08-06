@@ -32,6 +32,7 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::Amber,
             ])
             ->brandLogo(asset('img/logo.png'))
+            ->brandLogoHeight('3.5rem')
             ->profile()
             ->resources([
                 HorarioResource::class,

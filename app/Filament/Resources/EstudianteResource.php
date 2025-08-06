@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Models\User;
 use App\Models\Carrera;
+use App\Models\Jornada;
 
 class EstudianteResource extends Resource
 {
@@ -61,12 +62,8 @@ class EstudianteResource extends Resource
                     ->required()
                     ->maxLength(2),
                 Forms\Components\Select::make('jornada')
-                    ->options([
-                        'matutina' => 'Matutina',
-                        'vespertina' => 'Vespertina',
-                        'nocturna' => 'Nocturna',
-                        'intensiva' => 'Intensiva',
-                    ])
+                    ->label('Jornada')
+                    ->options(fn() => Jornada::all()->pluck('nombre', 'nombre')->map(fn($nombre) => ucfirst($nombre)))
                     ->required(),
                 Forms\Components\DatePicker::make('fecha_ingreso')
                     ->required(),

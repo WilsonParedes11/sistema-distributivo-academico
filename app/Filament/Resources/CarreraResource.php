@@ -47,8 +47,8 @@ class CarreraResource extends Resource
                 Forms\Components\TextInput::make('duracion_semestres')
                     ->required()
                     ->numeric(),
-                Forms\Components\Textarea::make('descripcion')
-                    ->columnSpanFull(),
+                // Forms\Components\Textarea::make('descripcion')
+                //     ->columnSpanFull(),
                 Forms\Components\Toggle::make('activa')
                     ->required(),
             ]);

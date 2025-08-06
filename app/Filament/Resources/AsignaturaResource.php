@@ -53,8 +53,8 @@ class AsignaturaResource extends Resource
                 Forms\Components\TextInput::make('creditos')
                     ->required()
                     ->numeric(),
-                Forms\Components\Textarea::make('descripcion')
-                    ->columnSpanFull(),
+                // Forms\Components\Textarea::make('descripcion')
+                //     ->columnSpanFull(),
                 Forms\Components\Toggle::make('activa')
                     ->required(),
             ]);

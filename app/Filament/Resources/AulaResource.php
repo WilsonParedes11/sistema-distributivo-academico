@@ -68,8 +68,8 @@ class AulaResource extends Resource
                         'auditorio' => 'Auditorio',
                     ])
                     ->required(),
-                Forms\Components\Textarea::make('recursos_disponibles')
-                    ->columnSpanFull(),
+                // Forms\Components\Textarea::make('recursos_disponibles')
+                //     ->columnSpanFull(),
                 Forms\Components\Toggle::make('activa')
                     ->required(),
             ]);
@@ -99,9 +99,9 @@ class AulaResource extends Resource
                 Tables\Columns\TextColumn::make('tipo'),
                 Tables\Columns\IconColumn::make('activa')
                     ->boolean(),
-                Tables\Columns\TextColumn::make('recursos_disponibles')
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->limit(100),
+                // Tables\Columns\TextColumn::make('recursos_disponibles')
+                //     ->toggleable(isToggledHiddenByDefault: true)
+                //     ->limit(100),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()

@@ -100,7 +100,11 @@ class AsignaturaResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                Tables\Filters\SelectFilter::make('carrera_id')
+                    ->label('Carrera')
+                    ->options(Carrera::all()->pluck('nombre', 'id'))
+                    ->searchable()
+                    ->preload(),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

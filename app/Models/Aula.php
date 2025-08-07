@@ -102,6 +102,8 @@ class Aula extends Model
         return in_array($recurso, $this->recursos_disponibles ?? []);
     }
 
+    //funcion para obtener horarios agrupados por dia de la semana
+
     public function horariosSemana()
     {
         return $this->horarios()

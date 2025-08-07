@@ -137,6 +137,8 @@ class CarreraHorariosResource extends Resource
         ];
     }
 
+    // Métodos de navegación
+
     public static function shouldRegisterNavigation(): bool
     {
         return auth()->user()?->hasRole('administrador');

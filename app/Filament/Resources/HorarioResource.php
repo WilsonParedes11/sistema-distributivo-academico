@@ -15,6 +15,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Filament\Actions\Action;
 
 class HorarioResource extends Resource
 {
@@ -263,5 +264,15 @@ class HorarioResource extends Resource
     {
         return auth()->user()?->hasRole('administrador');
     }
-}
 
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('verHorariosCarrera')
+                ->label('Horarios por Carrera')
+                ->icon('heroicon-o-table-cells')
+                ->color('info')
+                ->url(fn() => route('filament.resources.carrera-horarios.index')),
+        ];
+    }
+}

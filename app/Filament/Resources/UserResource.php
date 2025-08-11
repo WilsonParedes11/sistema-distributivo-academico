@@ -53,6 +53,7 @@ class UserResource extends Resource
                     ->label('Email Verificado'),
                 Forms\Components\TextInput::make('password')
                     ->password()
+                    ->hiddenOn('edit')
                     ->required()
                     ->maxLength(255)
                     ->dehydrateStateUsing(fn($state) => bcrypt($state))

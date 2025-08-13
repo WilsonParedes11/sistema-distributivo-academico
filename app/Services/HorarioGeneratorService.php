@@ -693,7 +693,7 @@ class HorarioGeneratorService
         return Horario::whereHas('distributivoAcademico', function ($query) use ($docenteId, $periodoAcademicoId) {
             $query->where('docente_id', $docenteId)
                 ->where('periodo_academico_id', $periodoAcademicoId);
-        })->with(['distributivoAcademico.asignatura', 'distributivoAcademico.carrera'])
+    })->with(['distributivoAcademico.asignatura', 'distributivoAcademico.carrera', 'distributivoAcademico.docente.user'])
             ->orderBy('dia_semana')
             ->orderBy('hora_inicio')
             ->get();

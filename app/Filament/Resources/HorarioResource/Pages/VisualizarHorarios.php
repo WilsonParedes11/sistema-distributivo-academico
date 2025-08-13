@@ -56,7 +56,7 @@ class VisualizarHorarios extends Page
                             ->label('Tipo de Vista')
                             ->options([
                                 'carrera' => 'Por Carrera/Curso',
-                                // 'docente' => 'Por Docente',
+                                'docente' => 'Por Docente',
                                 // 'aula' => 'Por Aula',
                                 // 'campus' => 'Por Campus',
                             ])
@@ -73,7 +73,7 @@ class VisualizarHorarios extends Page
                             Forms\Components\Select::make('campus_id')
                                 ->label('Campus')
                                 ->options(Campus::where('activo', true)->pluck('nombre', 'id'))
-                                ->required()
+                                ->required(fn(Forms\Get $get) => in_array($get('tipo_vista'), ['carrera', 'aula', 'campus']))
                                 ->reactive()
                                 ->visible(fn(Forms\Get $get) => in_array($get('tipo_vista'), ['carrera', 'aula', 'campus']))
                                 ->afterStateUpdated(fn() => $this->limpiarSeleccionesAdicionales()),
@@ -90,7 +90,7 @@ class VisualizarHorarios extends Page
                                         ->where('carreras.activa', true)
                                         ->pluck('nombre', 'carreras.id');
                                 })
-                                ->required()
+                                ->required(fn(Forms\Get $get) => $get('tipo_vista') === 'carrera')
                                 ->reactive()
                                 ->visible(fn(Forms\Get $get) => $get('tipo_vista') === 'carrera')
                                 ->afterStateUpdated(fn() => $this->limpiarHorarios()),
@@ -104,7 +104,7 @@ class VisualizarHorarios extends Page
                                     4 => 'IV Semestre',
                                     5 => 'V Semestre',
                                 ])
-                                ->required()
+                                ->required(fn(Forms\Get $get) => $get('tipo_vista') === 'carrera')
                                 ->reactive()
                                 ->visible(fn(Forms\Get $get) => $get('tipo_vista') === 'carrera')
                                 ->afterStateUpdated(fn() => $this->limpiarHorarios()),
@@ -113,7 +113,7 @@ class VisualizarHorarios extends Page
                                 ->label('Paralelo')
                                 ->placeholder('Ej: A, B, C')
                                 ->maxLength(2)
-                                ->required()
+                                ->required(fn(Forms\Get $get) => $get('tipo_vista') === 'carrera')
                                 ->reactive()
                                 ->visible(fn(Forms\Get $get) => $get('tipo_vista') === 'carrera')
                                 ->afterStateUpdated(fn() => $this->limpiarHorarios()),
@@ -127,10 +127,15 @@ class VisualizarHorarios extends Page
                                         ->pluck('user.nombre_completo', 'id')
                                 )
                                 ->searchable()
-                                ->required()
+                                ->required(fn(Forms\Get $get) => $get('tipo_vista') === 'docente')
                                 ->reactive()
                                 ->visible(fn(Forms\Get $get) => $get('tipo_vista') === 'docente')
-                                ->afterStateUpdated(fn() => $this->limpiarHorarios()),
+                                ->afterStateUpdated(function(Forms\Get $get) {
+                                    $this->limpiarHorarios();
+                                    if($get('tipo_vista') === 'docente' && $get('periodo_academico_id')) {
+                                        $this->consultarHorarios();
+                                    }
+                                }),
                         ]),
                     ])
                     ->columns(2),
@@ -232,7 +237,18 @@ class VisualizarHorarios extends Page
     private function limpiarFormulario(): void
     {
         $data = $this->form->getState();
-        unset($data['carrera_id'], $data['semestre'], $data['paralelo'], $data['docente_id'], $data['campus_id']);
+        // Limpiar campos según la vista seleccionada
+        if ($this->tipoVista === 'carrera') {
+            // Vista carrera no necesita docente
+            unset($data['docente_id']);
+        }
+
+        if ($this->tipoVista === 'docente') {
+            // Vista docente no necesita filtros de carrera/curso
+            unset($data['carrera_id'], $data['semestre'], $data['paralelo'], $data['campus_id']);
+        }
+
+        // Para otras vistas futuras se podría añadir lógica similar
         $this->form->fill($data);
     }
 

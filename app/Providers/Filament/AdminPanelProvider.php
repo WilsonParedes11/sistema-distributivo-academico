@@ -47,7 +47,7 @@ class AdminPanelProvider extends PanelProvider
             ->widgets([
                 //Widgets\AccountWidget::class,
                 \App\Filament\Widgets\EstadisticasGeneralesWidget::class,
-                \App\Filament\Widgets\HorasDocentesWidget::class,
+                // \App\Filament\Widgets\HorasDocentesWidget::class,
                 \App\Filament\Widgets\ProgresoEstudiantesWidget::class,
                 // \App\Filament\Widgets\AsignaturasPorCarreraWidget::class,
             ])

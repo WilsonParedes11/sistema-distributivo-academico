@@ -25,6 +25,8 @@ class DistributivoAcademicoResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
+    protected static ?string $pluralLabel = 'Carga Horaria';
+
     public static function canViewAny(): bool
     {
         return auth()->user()?->hasRole('administrador');

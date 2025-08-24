@@ -17,6 +17,8 @@ class PeriodoAcademicoResource extends Resource
 {
     protected static ?string $model = PeriodoAcademico::class;
 
+    protected static ?int $navigationSort = 2;
+
     protected static ?string $navigationIcon = 'heroicon-o-calendar-date-range';
 
     public static function canViewAny(): bool

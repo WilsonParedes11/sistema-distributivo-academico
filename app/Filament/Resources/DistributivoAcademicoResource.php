@@ -21,6 +21,8 @@ class DistributivoAcademicoResource extends Resource
 {
     protected static ?string $model = DistributivoAcademico::class;
 
+    protected static ?int $navigationSort = 11;
+
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
     public static function canViewAny(): bool

@@ -17,6 +17,8 @@ class CarreraResource extends Resource
 {
     protected static ?string $model = Carrera::class;
 
+    protected static ?int $navigationSort = 4;
+
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
 
     public static function canViewAny(): bool

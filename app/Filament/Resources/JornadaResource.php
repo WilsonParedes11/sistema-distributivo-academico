@@ -17,6 +17,8 @@ class JornadaResource extends Resource
 {
     protected static ?string $model = Jornada::class;
 
+    protected static ?int $navigationSort = 10;
+
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
 
     public static function canViewAny(): bool

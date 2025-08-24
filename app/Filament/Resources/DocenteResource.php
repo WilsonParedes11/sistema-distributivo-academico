@@ -18,6 +18,8 @@ class DocenteResource extends Resource
 {
     protected static ?string $model = Docente::class;
 
+    protected static ?int $navigationSort = 8;
+
     protected static ?string $navigationIcon = 'heroicon-o-user-plus';
 
     public static function canViewAny(): bool

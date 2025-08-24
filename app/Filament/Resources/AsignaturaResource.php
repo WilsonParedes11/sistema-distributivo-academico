@@ -18,6 +18,8 @@ class AsignaturaResource extends Resource
 {
     protected static ?string $model = Asignatura::class;
 
+    protected static ?int $navigationSort = 5;
+
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
     public static function canViewAny(): bool

@@ -18,6 +18,8 @@ class AulaResource extends Resource
 {
     protected static ?string $model = Aula::class;
 
+    protected static ?int $navigationSort = 6;
+
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
     public static function canViewAny(): bool

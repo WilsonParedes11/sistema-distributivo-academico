@@ -17,6 +17,8 @@ class CampusResource extends Resource
 {
     protected static ?string $model = Campus::class;
 
+    protected static ?int $navigationSort = 3;
+
     protected static ?string $navigationIcon = 'heroicon-o-building-library';
 
     protected static ?string $pluralLabel = 'Campus';

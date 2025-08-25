@@ -23,7 +23,12 @@
                             $horasOcupadas = $horariosGrupo->map(function($h) { return [\Carbon\Carbon::parse($h->hora_inicio)->format('H:i'), \Carbon\Carbon::parse($h->hora_fin)->format('H:i')]; });
                             $minHora = $horasOcupadas->min(fn($h) => $h[0]) ?? null;
                             $maxHora = $horasOcupadas->max(fn($h) => $h[1]) ?? null;
-                            $rangosFiltrados = collect($horariosDisponibles)->filter(function($rango) use ($minHora,$maxHora){ if(!$minHora||!$maxHora) return false; [$i,$f]=explode('-',$rango); return ($f>$minHora && $i<$maxHora); });
+                            $rangosFiltrados = collect($horariosDisponibles)->filter(function($rango) use ($minHora,$maxHora){
+                                if(!$minHora||!$maxHora) return true; // Mostrar todos si no hay horarios ocupados
+                                if(str_starts_with($rango, 'RECESO:')) return true; // Siempre mostrar recesos
+                                [$i,$f]=explode('-',$rango);
+                                return ($f>$minHora && $i<$maxHora);
+                            });
                             $horariosPorDia = ['lunes','martes','miercoles','jueves','viernes','sabado'];
                             $mapDia = [];
                             foreach($horariosPorDia as $d) { $mapDia[$d] = $horariosGrupo->where('dia_semana',$d)->sortBy('hora_inicio')->values(); }
@@ -45,28 +50,49 @@
                                     </thead>
                                     <tbody class="bg-white divide-y divide-gray-200">
                                         @foreach($rangosFiltrados as $rangoHora)
-                                            <tr class="hover:bg-gray-50">
-                                                <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50 text-center">{{ $rangoHora }}</td>
+                                            @php
+                                                $esReceso = str_starts_with($rangoHora, 'RECESO:');
+                                                $rangoLimpio = $esReceso ? str_replace('RECESO:', '', $rangoHora) : $rangoHora;
+                                            @endphp
+                                            <tr class="hover:bg-gray-50 {{ $esReceso ? 'bg-yellow-50' : '' }}">
+                                                <td class="px-4 py-4 whitespace-nowrap text-sm font-medium {{ $esReceso ? 'text-yellow-800 bg-yellow-100' : 'text-gray-900 bg-gray-50' }} text-center">
+                                                    @if($esReceso)
+                                                        <div class="flex flex-col items-center">
+                                                            <span class="text-xs font-bold">🍽️ RECESO</span>
+                                                            <span class="text-xs">{{ $rangoLimpio }}</span>
+                                                        </div>
+                                                    @else
+                                                        {{ $rangoHora }}
+                                                    @endif
+                                                </td>
                                                 @foreach(['lunes','martes','miercoles','jueves','viernes','sabado'] as $diaClave)
-                                                    @php
-                                                        $listaDia = $mapDia[$diaClave] ?? collect();
-                                                        $horarioEnRango = $listaDia->first(function($horario) use($rangoHora){ [$iR,$fR]=explode('-',$rangoHora); $iH=\Carbon\Carbon::parse($horario->hora_inicio)->format('H:i'); $fH=\Carbon\Carbon::parse($horario->hora_fin)->format('H:i'); return ($iH>=$iR && $iH<$fR) || ($fH>$iR && $fH<=$fR) || ($iH<=$iR && $fH>=$fR); });
-                                                    @endphp
-                                                    <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900 border-l border-gray-200 relative">
-                                                        @if($horarioEnRango)
-                                                            <div class="rounded-lg p-2 text-xs h-full min-h-[80px] flex flex-col justify-center {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-100 border border-green-300' : 'bg-blue-100 border border-blue-300' }}">
-                                                                <div class="font-semibold text-gray-800 mb-1" title="{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}">{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}</div>
-                                                                <div class="text-gray-600 mb-1">{{ $horarioEnRango->distributivoAcademico->carrera->codigo }}-{{ $horarioEnRango->distributivoAcademico->semestre }}{{ $horarioEnRango->distributivoAcademico->paralelo }}</div>
-                                                                {{-- <div class="text-gray-500 text-[10px]">{{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}</div> --}}
-                                                                @if($horarioEnRango->aula)
-                                                                    <div class="text-gray-500 text-[10px]">📍 {{ $horarioEnRango->aula }}</div>
-                                                                @endif
-                                                                <div class="mt-1"><span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-200 text-green-800':'bg-blue-200 text-blue-800' }}">{{ ucfirst($horarioEnRango->tipo_clase) }}</span></div>
+                                                    @if($esReceso)
+                                                        <td class="px-2 py-2 whitespace-nowrap text-sm border-l border-gray-200 bg-yellow-50">
+                                                            <div class="h-full min-h-[80px] flex items-center justify-center bg-yellow-100 rounded-lg border border-yellow-300">
+                                                                <span class="text-yellow-700 font-medium text-xs">🍽️ RECESO ACADÉMICO</span>
                                                             </div>
-                                                        @else
-                                                            <div class="h-full min-h-[80px] flex items-center justify-center text-gray-300"><span class="text-xs">Libre</span></div>
-                                                        @endif
-                                                    </td>
+                                                        </td>
+                                                    @else
+                                                        @php
+                                                            $listaDia = $mapDia[$diaClave] ?? collect();
+                                                            $horarioEnRango = $listaDia->first(function($horario) use($rangoHora){ [$iR,$fR]=explode('-',$rangoHora); $iH=\Carbon\Carbon::parse($horario->hora_inicio)->format('H:i'); $fH=\Carbon\Carbon::parse($horario->hora_fin)->format('H:i'); return ($iH>=$iR && $iH<$fR) || ($fH>$iR && $fH<=$fR) || ($iH<=$iR && $fH>=$fR); });
+                                                        @endphp
+                                                        <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900 border-l border-gray-200 relative">
+                                                            @if($horarioEnRango)
+                                                                <div class="rounded-lg p-2 text-xs h-full min-h-[80px] flex flex-col justify-center {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-100 border border-green-300' : 'bg-blue-100 border border-blue-300' }}">
+                                                                    <div class="font-semibold text-gray-800 mb-1" title="{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}">{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}</div>
+                                                                    <div class="text-gray-600 mb-1">{{ $horarioEnRango->distributivoAcademico->carrera->codigo }}-{{ $horarioEnRango->distributivoAcademico->semestre }}{{ $horarioEnRango->distributivoAcademico->paralelo }}</div>
+                                                                    {{-- <div class="text-gray-500 text-[10px]">{{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}</div> --}}
+                                                                    @if($horarioEnRango->aula)
+                                                                        <div class="text-gray-500 text-[10px]">📍 {{ $horarioEnRango->aula }}</div>
+                                                                    @endif
+                                                                    <div class="mt-1"><span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-200 text-green-800':'bg-blue-200 text-blue-800' }}">{{ ucfirst($horarioEnRango->tipo_clase) }}</span></div>
+                                                                </div>
+                                                            @else
+                                                                <div class="h-full min-h-[80px] flex items-center justify-center text-gray-300"><span class="text-xs">Libre</span></div>
+                                                            @endif
+                                                        </td>
+                                                    @endif
                                                 @endforeach
                                             </tr>
                                         @endforeach
@@ -100,7 +126,12 @@
                         $horasOcupadas = $horarios->map(function($h){ return [\Carbon\Carbon::parse($h->hora_inicio)->format('H:i'), \Carbon\Carbon::parse($h->hora_fin)->format('H:i')]; });
                         $minHora = $horasOcupadas->min(fn($h)=>$h[0]) ?? null;
                         $maxHora = $horasOcupadas->max(fn($h)=>$h[1]) ?? null;
-                        $rangosFiltrados = collect($horariosDisponibles)->filter(function($r) use($minHora,$maxHora){ if(!$minHora||!$maxHora) return false; [$i,$f]=explode('-',$r); return ($f>$minHora && $i<$maxHora); });
+                        $rangosFiltrados = collect($horariosDisponibles)->filter(function($r) use($minHora,$maxHora){
+                            if(!$minHora||!$maxHora) return true; // Mostrar todos si no hay horarios ocupados
+                            if(str_starts_with($r, 'RECESO:')) return true; // Siempre mostrar recesos
+                            [$i,$f]=explode('-',$r);
+                            return ($f>$minHora && $i<$maxHora);
+                        });
                     @endphp
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
@@ -114,28 +145,49 @@
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 @foreach($rangosFiltrados as $rangoHora)
-                                    <tr class="hover:bg-gray-50">
-                                        <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50 text-center">{{ $rangoHora }}</td>
+                                    @php
+                                        $esReceso = str_starts_with($rangoHora, 'RECESO:');
+                                        $rangoLimpio = $esReceso ? str_replace('RECESO:', '', $rangoHora) : $rangoHora;
+                                    @endphp
+                                    <tr class="hover:bg-gray-50 {{ $esReceso ? 'bg-yellow-50' : '' }}">
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm font-medium {{ $esReceso ? 'text-yellow-800 bg-yellow-100' : 'text-gray-900 bg-gray-50' }} text-center">
+                                            @if($esReceso)
+                                                <div class="flex flex-col items-center">
+                                                    <span class="text-xs font-bold">🍽️ RECESO</span>
+                                                    <span class="text-xs">{{ $rangoLimpio }}</span>
+                                                </div>
+                                            @else
+                                                {{ $rangoHora }}
+                                            @endif
+                                        </td>
                                         @foreach(['lunes','martes','miercoles','jueves','viernes','sabado'] as $dia)
-                                            @php
-                                                $listaDia = $horariosPorDia[$dia] ?? collect();
-                                                $horarioEnRango = $listaDia->first(function($horario) use($rangoHora){ [$iR,$fR]=explode('-',$rangoHora); $iH=\Carbon\Carbon::parse($horario->hora_inicio)->format('H:i'); $fH=\Carbon\Carbon::parse($horario->hora_fin)->format('H:i'); return ($iH>=$iR && $iH<$fR) || ($fH>$iR && $fH<=$fR) || ($iH<=$iR && $fH>=$fR); });
-                                            @endphp
-                                            <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900 border-l border-gray-200 relative">
-                                                @if($horarioEnRango)
-                                                    <div class="rounded-lg p-2 text-xs h-full min-h-[80px] flex flex-col justify-center {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-100 border border-green-300':'bg-blue-100 border border-blue-300' }}">
-                                                        <div class="font-semibold text-gray-800 mb-1" title="{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}">{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}</div>
-                                                        <div class="text-gray-600 mb-1" title="{{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo }}">{{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo }}</div>
-                                                        {{-- <div class="text-gray-500 text-[10px]">{{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}</div> --}}
-                                                        @if($horarioEnRango->aula)
-                                                            <div class="text-gray-500 text-[10px]">📍 {{ $horarioEnRango->aula }}</div>
-                                                        @endif
-                                                        <div class="mt-1"><span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-200 text-green-800':'bg-blue-200 text-blue-800' }}">{{ ucfirst($horarioEnRango->tipo_clase) }}</span></div>
+                                            @if($esReceso)
+                                                <td class="px-2 py-2 whitespace-nowrap text-sm border-l border-gray-200 bg-yellow-50">
+                                                    <div class="h-full min-h-[80px] flex items-center justify-center bg-yellow-100 rounded-lg border border-yellow-300">
+                                                        <span class="text-yellow-700 font-medium text-xs">🍽️ RECESO ACADÉMICO</span>
                                                     </div>
-                                                @else
-                                                    <div class="h-full min-h-[80px] flex items-center justify-center text-gray-300"><span class="text-xs">Libre</span></div>
-                                                @endif
-                                            </td>
+                                                </td>
+                                            @else
+                                                @php
+                                                    $listaDia = $horariosPorDia[$dia] ?? collect();
+                                                    $horarioEnRango = $listaDia->first(function($horario) use($rangoHora){ [$iR,$fR]=explode('-',$rangoHora); $iH=\Carbon\Carbon::parse($horario->hora_inicio)->format('H:i'); $fH=\Carbon\Carbon::parse($horario->hora_fin)->format('H:i'); return ($iH>=$iR && $iH<$fR) || ($fH>$iR && $fH<=$fR) || ($iH<=$iR && $fH>=$fR); });
+                                                @endphp
+                                                <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900 border-l border-gray-200 relative">
+                                                    @if($horarioEnRango)
+                                                        <div class="rounded-lg p-2 text-xs h-full min-h-[80px] flex flex-col justify-center {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-100 border border-green-300':'bg-blue-100 border border-blue-300' }}">
+                                                            <div class="font-semibold text-gray-800 mb-1" title="{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}">{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}</div>
+                                                            <div class="text-gray-600 mb-1" title="{{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo }}">{{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo }}</div>
+                                                            {{-- <div class="text-gray-500 text-[10px]">{{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}</div> --}}
+                                                            @if($horarioEnRango->aula)
+                                                                <div class="text-gray-500 text-[10px]">📍 {{ $horarioEnRango->aula }}</div>
+                                                            @endif
+                                                            <div class="mt-1"><span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-200 text-green-800':'bg-blue-200 text-blue-800' }}">{{ ucfirst($horarioEnRango->tipo_clase) }}</span></div>
+                                                        </div>
+                                                    @else
+                                                        <div class="h-full min-h-[80px] flex items-center justify-center text-gray-300"><span class="text-xs">Libre</span></div>
+                                                    @endif
+                                                </td>
+                                            @endif
                                         @endforeach
                                     </tr>
                                 @endforeach

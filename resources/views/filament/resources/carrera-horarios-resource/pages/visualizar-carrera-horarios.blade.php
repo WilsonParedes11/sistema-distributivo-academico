@@ -28,11 +28,32 @@
                     if ($horariosGrupo->isEmpty()) return [];
 
                     $primeraJornada = $horariosGrupo->first()->distributivoAcademico->jornada ?? 'matutina';
-                    $jornadaModel = \App\Models\Jornada::nombre($primeraJornada)->first();
+                    $jornadaModel = \App\Models\Jornada::where('nombre', $primeraJornada)->first();
 
                     if ($jornadaModel) {
-                        $rangos = collect($jornadaModel->intervalos)->map(function($intervalo) {
-                            return $intervalo['inicio'] . '-' . $intervalo['fin'];
+                        $todosLosRangos = [];
+
+                        // Agregar intervalos normales de clase
+                        foreach ($jornadaModel->intervalos as $intervalo) {
+                            $todosLosRangos[] = [
+                                'tipo' => 'clase',
+                                'rango' => $intervalo['inicio'] . '-' . $intervalo['fin'],
+                                'hora_inicio' => $intervalo['inicio']
+                            ];
+                        }
+
+                        // Agregar receso si existe
+                        if ($jornadaModel->tieneReceso()) {
+                            $todosLosRangos[] = [
+                                'tipo' => 'receso',
+                                'rango' => 'RECESO:' . $jornadaModel->hora_inicio_receso . '-' . $jornadaModel->hora_fin_receso,
+                                'hora_inicio' => $jornadaModel->hora_inicio_receso
+                            ];
+                        }
+
+                        // Ordenar por hora de inicio para mantener secuencia temporal
+                        usort($todosLosRangos, function($a, $b) {
+                            return strcmp($a['hora_inicio'], $b['hora_inicio']);
                         });
 
                         // Filtrar solo rangos que tengan horarios
@@ -46,11 +67,14 @@
                         $minHora = $horasOcupadas->min(fn($h) => $h[0]) ?? null;
                         $maxHora = $horasOcupadas->max(fn($h) => $h[1]) ?? null;
 
-                        return $rangos->filter(function($rango) use ($minHora, $maxHora) {
-                            if (!$minHora || !$maxHora) return false;
-                            [$inicio, $fin] = explode('-', $rango);
+                        $rangosFiltrados = collect($todosLosRangos)->filter(function($rango) use ($minHora, $maxHora) {
+                            if (!$minHora || !$maxHora) return true; // Mostrar todos si no hay horarios ocupados
+                            if($rango['tipo'] === 'receso') return true; // Siempre mostrar recesos
+                            [$inicio, $fin] = explode('-', $rango['rango']);
                             return ($fin > $minHora && $inicio < $maxHora);
-                        })->values()->toArray();
+                        });
+
+                        return $rangosFiltrados->pluck('rango')->values()->toArray();
                     }
 
                     return [];
@@ -147,61 +171,80 @@
                                             <tr class="hover:bg-gray-50">
                                                 <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">
                                                     <div class="text-center">
-                                                        {{ $rangoHora }}
+                                                        @if(str_starts_with($rangoHora, 'RECESO:'))
+                                                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                                🍽️ {{ substr($rangoHora, 7) }}
+                                                            </span>
+                                                        @else
+                                                            {{ $rangoHora }}
+                                                        @endif
                                                     </div>
                                                 </td>
 
                                                 @foreach(['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] as $dia)
-                                                    @php
-                                                        $horariosDelDia = $horariosPorDia[$dia] ?? collect();
-                                                        $horarioEnRango = $horariosDelDia->first(function ($horario) use ($rangoHora) {
-                                                            [$inicioRango, $finRango] = explode('-', $rangoHora);
-                                                            $inicioHorario = \Carbon\Carbon::parse($horario->hora_inicio)->format('H:i');
-                                                            $finHorario = \Carbon\Carbon::parse($horario->hora_fin)->format('H:i');
-                                                            return ($inicioHorario >= $inicioRango && $inicioHorario < $finRango) ||
-                                                                ($finHorario > $inicioRango && $finHorario <= $finRango) ||
-                                                                ($inicioHorario <= $inicioRango && $finHorario >= $finRango);
-                                                        });
-                                                    @endphp
-
-                                                    <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900 border-l border-gray-200 relative">
-                                                        @if($horarioEnRango)
-                                                            <div class="rounded-lg p-2 text-xs h-full min-h-[80px] flex flex-col justify-center
-                                                                {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-100 border border-green-300' :
-                                                                   ($horarioEnRango->tipo_clase === 'laboratorio' ? 'bg-yellow-100 border border-yellow-300' : 'bg-blue-100 border border-blue-300') }}">
-
-                                                                <div class="font-semibold text-gray-800 mb-1" title="{{ $horarioEnRango->distributivoAcademico->asignatura->nombre ?? 'N/A' }}">
-                                                                    {{ $horarioEnRango->distributivoAcademico->asignatura->nombre ?? 'N/A' }}
+                                                    @if(str_starts_with($rangoHora, 'RECESO:'))
+                                                        <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900 border-l border-gray-200 relative">
+                                                            <div class="rounded-lg p-2 text-xs h-full min-h-[80px] flex flex-col justify-center bg-yellow-100 border border-yellow-300">
+                                                                <div class="font-semibold text-yellow-800 mb-1 text-center">
+                                                                    🍽️ RECESO ACADÉMICO
                                                                 </div>
-
-                                                                <div class="text-gray-600 mb-1" title="{{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo ?? 'N/A' }}">
-                                                                    {{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo ?? 'N/A' }}
-                                                                </div>
-
-                                                                {{-- <div class="text-gray-500 text-[10px]">
-                                                                    {{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}
+                                                                {{-- <div class="text-yellow-600 text-center text-[10px]">
+                                                                    {{ substr($rangoHora, 7) }}
                                                                 </div> --}}
+                                                            </div>
+                                                        </td>
+                                                    @else
+                                                        @php
+                                                            $horariosDelDia = $horariosPorDia[$dia] ?? collect();
+                                                            $horarioEnRango = $horariosDelDia->first(function ($horario) use ($rangoHora) {
+                                                                [$inicioRango, $finRango] = explode('-', $rangoHora);
+                                                                $inicioHorario = \Carbon\Carbon::parse($horario->hora_inicio)->format('H:i');
+                                                                $finHorario = \Carbon\Carbon::parse($horario->hora_fin)->format('H:i');
+                                                                return ($inicioHorario >= $inicioRango && $inicioHorario < $finRango) ||
+                                                                    ($finHorario > $inicioRango && $finHorario <= $finRango) ||
+                                                                    ($inicioHorario <= $inicioRango && $finHorario >= $finRango);
+                                                            });
+                                                        @endphp
 
-                                                                @if($horarioEnRango->aula)
-                                                                    <div class="text-gray-500 text-[10px]">
-                                                                        📍 {{ $horarioEnRango->aula }}
+                                                        <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900 border-l border-gray-200 relative">
+                                                            @if($horarioEnRango)
+                                                                <div class="rounded-lg p-2 text-xs h-full min-h-[80px] flex flex-col justify-center
+                                                                    {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-100 border border-green-300' :
+                                                                       ($horarioEnRango->tipo_clase === 'laboratorio' ? 'bg-yellow-100 border border-yellow-300' : 'bg-blue-100 border border-blue-300') }}">
+
+                                                                    <div class="font-semibold text-gray-800 mb-1" title="{{ $horarioEnRango->distributivoAcademico->asignatura->nombre ?? 'N/A' }}">
+                                                                        {{ $horarioEnRango->distributivoAcademico->asignatura->nombre ?? 'N/A' }}
                                                                     </div>
-                                                                @endif
 
-                                                                <div class="mt-1">
-                                                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium
-                                                                        {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-200 text-green-800' :
-                                                                           ($horarioEnRango->tipo_clase === 'laboratorio' ? 'bg-yellow-200 text-yellow-800' : 'bg-blue-200 text-blue-800') }}">
-                                                                        {{ ucfirst($horarioEnRango->tipo_clase) }}
-                                                                    </span>
+                                                                    <div class="text-gray-600 mb-1" title="{{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo ?? 'N/A' }}">
+                                                                        {{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo ?? 'N/A' }}
+                                                                    </div>
+
+                                                                    {{-- <div class="text-gray-500 text-[10px]">
+                                                                        {{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}
+                                                                    </div> --}}
+
+                                                                    @if($horarioEnRango->aula)
+                                                                        <div class="text-gray-500 text-[10px]">
+                                                                            📍 {{ $horarioEnRango->aula }}
+                                                                        </div>
+                                                                    @endif
+
+                                                                    <div class="mt-1">
+                                                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium
+                                                                            {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-200 text-green-800' :
+                                                                               ($horarioEnRango->tipo_clase === 'laboratorio' ? 'bg-yellow-200 text-yellow-800' : 'bg-blue-200 text-blue-800') }}">
+                                                                            {{ ucfirst($horarioEnRango->tipo_clase) }}
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        @else
-                                                            <div class="h-full min-h-[80px] flex items-center justify-center text-gray-300">
-                                                                <span class="text-xs">Libre</span>
-                                                            </div>
-                                                        @endif
-                                                    </td>
+                                                            @else
+                                                                <div class="h-full min-h-[80px] flex items-center justify-center text-gray-300">
+                                                                    <span class="text-xs">Libre</span>
+                                                                </div>
+                                                            @endif
+                                                        </td>
+                                                    @endif
                                                 @endforeach
                                             </tr>
                                         @endforeach

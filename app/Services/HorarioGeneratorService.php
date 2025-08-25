@@ -386,6 +386,9 @@ class HorarioGeneratorService
         $horariosDelDia = [];
         $horasAsignadas = 0;
 
+        // Obtener configuración de jornada para validar recesos
+        $jornadaConfig = Jornada::where('nombre', $distributivo->jornada)->first();
+
         // Obtener todos los horarios ya ocupados en este día para este docente
         $horariosOcupadosDocente = [];
         $todosLosHorarios = array_merge($horariosExistentes, $horariosGenerados);
@@ -411,7 +414,8 @@ class HorarioGeneratorService
             // Verificar si este slot está disponible para el docente
             if (
                 $this->estaHorarioDisponibleParaDocente($dia, $horarioSlot['inicio'], $horarioSlot['fin'], $horariosExistentes, $horariosGenerados, $distributivo) &&
-                $this->estaAulaDisponible($aula, $dia, $horarioSlot['inicio'], $horarioSlot['fin'], $horariosExistentes, $horariosGenerados)
+                $this->estaAulaDisponible($aula, $dia, $horarioSlot['inicio'], $horarioSlot['fin'], $horariosExistentes, $horariosGenerados) &&
+                $this->noEstaEnReceso($jornadaConfig, $horarioSlot['inicio'], $horarioSlot['fin'])
             ) {
                 // Priorizar horas prácticas primero
                 $tipoClase = ($horasPracticasRestantes > 0) ? 'practica' : 'teorica';
@@ -618,6 +622,21 @@ class HorarioGeneratorService
         return ($inicio1 < $fin2) && ($fin1 > $inicio2);
     }
 
+    private function noEstaEnReceso(?Jornada $jornada, string $inicio, string $fin): bool
+    {
+        if (!$jornada || !$jornada->tieneReceso()) {
+            return true; // Si no hay jornada o no tiene receso, el horario es válido
+        }
+
+        $inicioHorario = Carbon::parse($inicio);
+        $finHorario = Carbon::parse($fin);
+
+        // Verificar si alguna parte del horario intersecta con el receso
+        return !($jornada->estaEnReceso($inicio) || $jornada->estaEnReceso($fin) ||
+                ($inicioHorario->lt(Carbon::parse($jornada->hora_inicio_receso)) &&
+                 $finHorario->gt(Carbon::parse($jornada->hora_inicio_receso))));
+    }
+
 
     private function obtenerHorariosPorJornada(string $jornada): array
     {
@@ -626,18 +645,14 @@ class HorarioGeneratorService
             throw new \Exception("No existe configuración para la jornada: {$jornada}");
         }
 
-        $horarios = [];
-        $inicio = Carbon::parse($config->hora_inicio);
+        // Usar la lógica del modelo que maneja recesos correctamente
+        $intervalos = $config->intervalos;
 
-        for ($i = 0; $i < $config->cantidad_horas; $i++) {
-            $fin = $inicio->copy()->addMinutes($config->duracion_hora);
-            $horarios[] = [
-                'inicio' => $inicio->format('H:i'),
-                'fin' => $fin->format('H:i')
-            ];
-            $inicio = $fin;
+        if (empty($intervalos)) {
+            throw new \Exception("No se pudieron generar intervalos de horarios para la jornada: {$jornada}");
         }
-        return $horarios;
+
+        return $intervalos;
     }
 
     private function validarAulasDisponibles(Collection $distributivos, array $campusIds): void

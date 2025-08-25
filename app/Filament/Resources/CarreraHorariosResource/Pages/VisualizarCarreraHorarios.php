@@ -142,11 +142,32 @@ class VisualizarCarreraHorarios extends Page
         // Determinar jornada según los horarios consultados
         $jornada = $horarios->first()->distributivoAcademico->jornada ?? 'matutina';
 
-        $jornadaModel = \App\Models\Jornada::nombre($jornada)->first();
+        $jornadaModel = \App\Models\Jornada::where('nombre', $jornada)->first();
 
         if ($jornadaModel) {
-            $rangos = collect($jornadaModel->intervalos)->map(function($intervalo) {
-                return $intervalo['inicio'] . '-' . $intervalo['fin'];
+            $todosLosRangos = [];
+
+            // Agregar intervalos normales de clase
+            foreach ($jornadaModel->intervalos as $intervalo) {
+                $todosLosRangos[] = [
+                    'tipo' => 'clase',
+                    'rango' => $intervalo['inicio'] . '-' . $intervalo['fin'],
+                    'hora_inicio' => $intervalo['inicio']
+                ];
+            }
+
+            // Agregar receso si existe
+            if ($jornadaModel->tieneReceso()) {
+                $todosLosRangos[] = [
+                    'tipo' => 'receso',
+                    'rango' => 'RECESO:' . $jornadaModel->hora_inicio_receso . '-' . $jornadaModel->hora_fin_receso,
+                    'hora_inicio' => $jornadaModel->hora_inicio_receso
+                ];
+            }
+
+            // Ordenar por hora de inicio para mantener secuencia temporal
+            usort($todosLosRangos, function($a, $b) {
+                return strcmp($a['hora_inicio'], $b['hora_inicio']);
             });
 
             // Filtrar rangos según horarios ocupados
@@ -160,11 +181,15 @@ class VisualizarCarreraHorarios extends Page
             $minHora = $horasOcupadas->min(fn($h) => $h[0]) ?? null;
             $maxHora = $horasOcupadas->max(fn($h) => $h[1]) ?? null;
 
-            return $rangos->filter(function($rango) use ($minHora, $maxHora) {
-                if (!$minHora || !$maxHora) return false;
-                [$inicio, $fin] = explode('-', $rango);
+            $rangosFiltrados = collect($todosLosRangos)->filter(function($item) use ($minHora, $maxHora) {
+                if (!$minHora || !$maxHora) return true; // Mostrar todos si no hay horarios ocupados
+                if($item['tipo'] === 'receso') return true; // Siempre mostrar recesos
+                [$inicio, $fin] = explode('-', $item['rango']);
                 return ($fin > $minHora && $inicio < $maxHora);
-            })->values()->toArray();
+            });
+
+            // Extraer solo los rangos
+            return $rangosFiltrados->pluck('rango')->values()->toArray();
         }
 
         return [];

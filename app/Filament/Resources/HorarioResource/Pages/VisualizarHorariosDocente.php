@@ -103,9 +103,9 @@ class VisualizarHorariosDocente extends Page
         }
         // Si no hay horarios, intentar obtener jornada desde el primer distributivo del docente
         if (!$jornada) {
-            $docente = \App\Models\Docente::where('user_id', \Auth::id())->first();
+            $docente = Docente::where('user_id', Auth::id())->first();
             if ($docente) {
-                $distributivo = $docente->distributivos()->first();
+                $distributivo = $docente->distributivosAcademicos()->first();
                 $jornada = $distributivo?->jornada;
             }
         }
@@ -113,12 +113,38 @@ class VisualizarHorariosDocente extends Page
             // Por defecto matutina
             $jornada = 'matutina';
         }
-        $jornadaModel = \App\Models\Jornada::nombre($jornada)->first();
+
+        $jornadaModel = \App\Models\Jornada::where('nombre', $jornada)->first();
         if ($jornadaModel) {
-            return collect($jornadaModel->intervalos)->map(function($intervalo) {
-                return $intervalo['inicio'] . '-' . $intervalo['fin'];
-            })->toArray();
+            $todosLosRangos = [];
+
+            // Agregar intervalos normales de clase
+            foreach ($jornadaModel->intervalos as $intervalo) {
+                $todosLosRangos[] = [
+                    'tipo' => 'clase',
+                    'rango' => $intervalo['inicio'] . '-' . $intervalo['fin'],
+                    'hora_inicio' => $intervalo['inicio']
+                ];
+            }
+
+            // Agregar receso si existe
+            if ($jornadaModel->tieneReceso()) {
+                $todosLosRangos[] = [
+                    'tipo' => 'receso',
+                    'rango' => 'RECESO:' . $jornadaModel->hora_inicio_receso . '-' . $jornadaModel->hora_fin_receso,
+                    'hora_inicio' => $jornadaModel->hora_inicio_receso
+                ];
+            }
+
+            // Ordenar por hora de inicio para mantener secuencia temporal
+            usort($todosLosRangos, function($a, $b) {
+                return strcmp($a['hora_inicio'], $b['hora_inicio']);
+            });
+
+            // Extraer solo los rangos ordenados
+            return array_column($todosLosRangos, 'rango');
         }
+
         // Fallback: lista vacía
         return [];
     }

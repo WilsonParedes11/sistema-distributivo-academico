@@ -30,7 +30,7 @@ class CarreraHorariosResource extends Resource
                     ->schema([
                         Forms\Components\Select::make('periodo_academico_id')
                             ->label('Período Académico')
-                            ->options(PeriodoAcademico::pluck('nombre', 'id'))
+                            ->options(PeriodoAcademico::where('activo', true)->pluck('nombre', 'id'))
                             ->required()
                             ->reactive()
                             ->afterStateUpdated(fn($livewire) => $livewire->limpiarHorarios()),

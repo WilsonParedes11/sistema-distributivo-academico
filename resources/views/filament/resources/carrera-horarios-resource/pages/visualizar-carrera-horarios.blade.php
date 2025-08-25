@@ -170,17 +170,17 @@
                                                                 {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-100 border border-green-300' :
                                                                    ($horarioEnRango->tipo_clase === 'laboratorio' ? 'bg-yellow-100 border border-yellow-300' : 'bg-blue-100 border border-blue-300') }}">
 
-                                                                <div class="font-semibold text-gray-800 mb-1">
-                                                                    {{ Str::limit($horarioEnRango->distributivoAcademico->asignatura->nombre ?? 'N/A', 20) }}
+                                                                <div class="font-semibold text-gray-800 mb-1" title="{{ $horarioEnRango->distributivoAcademico->asignatura->nombre ?? 'N/A' }}">
+                                                                    {{ $horarioEnRango->distributivoAcademico->asignatura->nombre ?? 'N/A' }}
                                                                 </div>
 
-                                                                <div class="text-gray-600 mb-1">
-                                                                    {{ Str::limit($horarioEnRango->distributivoAcademico->docente->user->nombre_completo ?? 'N/A', 15) }}
+                                                                <div class="text-gray-600 mb-1" title="{{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo ?? 'N/A' }}">
+                                                                    {{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo ?? 'N/A' }}
                                                                 </div>
 
-                                                                <div class="text-gray-500 text-[10px]">
+                                                                {{-- <div class="text-gray-500 text-[10px]">
                                                                     {{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}
-                                                                </div>
+                                                                </div> --}}
 
                                                                 @if($horarioEnRango->aula)
                                                                     <div class="text-gray-500 text-[10px]">

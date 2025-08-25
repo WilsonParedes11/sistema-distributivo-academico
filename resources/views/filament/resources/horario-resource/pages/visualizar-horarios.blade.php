@@ -55,9 +55,9 @@
                                                     <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900 border-l border-gray-200 relative">
                                                         @if($horarioEnRango)
                                                             <div class="rounded-lg p-2 text-xs h-full min-h-[80px] flex flex-col justify-center {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-100 border border-green-300' : 'bg-blue-100 border border-blue-300' }}">
-                                                                <div class="font-semibold text-gray-800 mb-1">{{ Str::limit($horarioEnRango->distributivoAcademico->asignatura->nombre,20) }}</div>
+                                                                <div class="font-semibold text-gray-800 mb-1" title="{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}">{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}</div>
                                                                 <div class="text-gray-600 mb-1">{{ $horarioEnRango->distributivoAcademico->carrera->codigo }}-{{ $horarioEnRango->distributivoAcademico->semestre }}{{ $horarioEnRango->distributivoAcademico->paralelo }}</div>
-                                                                <div class="text-gray-500 text-[10px]">{{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}</div>
+                                                                {{-- <div class="text-gray-500 text-[10px]">{{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}</div> --}}
                                                                 @if($horarioEnRango->aula)
                                                                     <div class="text-gray-500 text-[10px]">📍 {{ $horarioEnRango->aula }}</div>
                                                                 @endif
@@ -124,9 +124,9 @@
                                             <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900 border-l border-gray-200 relative">
                                                 @if($horarioEnRango)
                                                     <div class="rounded-lg p-2 text-xs h-full min-h-[80px] flex flex-col justify-center {{ $horarioEnRango->tipo_clase === 'practica' ? 'bg-green-100 border border-green-300':'bg-blue-100 border border-blue-300' }}">
-                                                        <div class="font-semibold text-gray-800 mb-1">{{ Str::limit($horarioEnRango->distributivoAcademico->asignatura->nombre,20) }}</div>
-                                                        <div class="text-gray-600 mb-1">{{ Str::limit($horarioEnRango->distributivoAcademico->docente->user->nombre_completo,15) }}</div>
-                                                        <div class="text-gray-500 text-[10px]">{{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}</div>
+                                                        <div class="font-semibold text-gray-800 mb-1" title="{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}">{{ $horarioEnRango->distributivoAcademico->asignatura->nombre }}</div>
+                                                        <div class="text-gray-600 mb-1" title="{{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo }}">{{ $horarioEnRango->distributivoAcademico->docente->user->nombre_completo }}</div>
+                                                        {{-- <div class="text-gray-500 text-[10px]">{{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}</div> --}}
                                                         @if($horarioEnRango->aula)
                                                             <div class="text-gray-500 text-[10px]">📍 {{ $horarioEnRango->aula }}</div>
                                                         @endif

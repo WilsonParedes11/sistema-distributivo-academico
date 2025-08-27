@@ -133,6 +133,36 @@
             background-color: #ff9800;
         }
 
+        .receso-hora {
+            background-color: #fff8e1;
+            border-left: 3px solid #ffc107;
+            color: #f57f17;
+            font-weight: bold;
+        }
+
+        .receso-celda {
+            background-color: #fff8e1;
+            border-left: 3px solid #ffc107;
+            color: #f57f17;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .receso-info {
+            font-size: 8px;
+            line-height: 1.2;
+        }
+
+        .multiple-clases {
+            border: 2px dashed #666;
+        }
+
+        .separador-clases {
+            margin: 2px 0;
+            border: none;
+            border-top: 1px dashed #999;
+        }
+
         .resumen {
             margin-top: 15px;
             display: grid;
@@ -206,60 +236,85 @@
         <tbody>
             @foreach($rangosFiltrados as $rangoHora)
                 <tr>
-                    <td class="hora-columna">{{ $rangoHora }}</td>
+                    <td class="hora-columna @if(str_starts_with($rangoHora, 'RECESO:')) receso-hora @endif">
+                        @if(str_starts_with($rangoHora, 'RECESO:'))
+                            🍽️ {{ substr($rangoHora, 7) }}
+                        @else
+                            {{ $rangoHora }}
+                        @endif
+                    </td>
 
                     @foreach(['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] as $dia)
-                        @php
-                            $horariosDelDia = $horariosPorDia[$dia] ?? collect();
-                            $horarioEnRango = $horariosDelDia->first(function ($horario) use ($rangoHora) {
-                                [$inicioRango, $finRango] = explode('-', $rangoHora);
-                                $inicioHorario = \Carbon\Carbon::parse($horario->hora_inicio)->format('H:i');
-                                $finHorario = \Carbon\Carbon::parse($horario->hora_fin)->format('H:i');
-                                return ($inicioHorario >= $inicioRango && $inicioHorario < $finRango) ||
-                                    ($finHorario > $inicioRango && $finHorario <= $finRango) ||
-                                    ($inicioHorario <= $inicioRango && $finHorario >= $finRango);
-                            });
-                        @endphp
-
-                        <td class="
-                                    @if($horarioEnRango)
-                                        clase-{{ $horarioEnRango->tipo_clase }}
-                                    @endif
-                                ">
-                            @if($horarioEnRango)
-                                <div class="clase-info">
-                                    <div class="asignatura">
-                                        {{ Str::limit($horarioEnRango->distributivoAcademico->asignatura->nombre, 25) }}
-                                    </div>
-
-                                    @if($tipoVista === 'carrera')
-                                        <div class="docente">
-                                            {{ Str::limit($horarioEnRango->distributivoAcademico->docente->user->nombre_completo, 20) }}
-                                        </div>
-                                    @else
-                                        <div class="curso">
-                                            {{ $horarioEnRango->distributivoAcademico->carrera->codigo }}-{{ $horarioEnRango->distributivoAcademico->semestre }}{{ $horarioEnRango->distributivoAcademico->paralelo }}
-                                        </div>
-                                    @endif
-
-                                    <div class="horario">
-                                        {{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}
-                                    </div>
-
-                                    @if($horarioEnRango->aula)
-                                        <div class="aula">
-                                            📍 {{ $horarioEnRango->aula }}
-                                        </div>
-                                    @endif
-
-                                    <span class="tipo-clase">
-                                        {{ ucfirst($horarioEnRango->tipo_clase) }}
-                                    </span>
+                        @if(str_starts_with($rangoHora, 'RECESO:'))
+                            <td class="receso-celda">
+                                <div class="receso-info">
+                                    🍽️ RECESO ACADÉMICO<br>
+                                    <small>{{ substr($rangoHora, 7) }}</small>
                                 </div>
-                            @else
-                                <div class="celda-libre">Libre</div>
-                            @endif
-                        </td>
+                            </td>
+                        @else
+                            @php
+                                $horariosDelDia = $horariosPorDia[$dia] ?? collect();
+                                // Para docentes con múltiples semestres, mostrar todos los horarios que coincidan
+                                $horariosEnRango = $horariosDelDia->filter(function ($horario) use ($rangoHora) {
+                                    [$inicioRango, $finRango] = explode('-', $rangoHora);
+                                    $inicioHorario = \Carbon\Carbon::parse($horario->hora_inicio)->format('H:i');
+                                    $finHorario = \Carbon\Carbon::parse($horario->hora_fin)->format('H:i');
+                                    return ($inicioHorario >= $inicioRango && $inicioHorario < $finRango) ||
+                                        ($finHorario > $inicioRango && $finHorario <= $finRango) ||
+                                        ($inicioHorario <= $inicioRango && $finHorario >= $finRango);
+                                });
+                            @endphp
+
+                            <td class="
+                                @if($horariosEnRango->isNotEmpty())
+                                    @php
+                                        $primerHorario = $horariosEnRango->first();
+                                    @endphp
+                                    clase-{{ $primerHorario->tipo_clase }}
+                                    @if($horariosEnRango->count() > 1) multiple-clases @endif
+                                @endif
+                            ">
+                                @if($horariosEnRango->isNotEmpty())
+                                    @foreach($horariosEnRango as $index => $horarioEnRango)
+                                        @if($index > 0)
+                                            <hr class="separador-clases">
+                                        @endif
+                                        <div class="clase-info">
+                                            <div class="asignatura">
+                                                {{ Str::limit($horarioEnRango->distributivoAcademico->asignatura->nombre, 25) }}
+                                            </div>
+
+                                            @if($tipoVista === 'carrera')
+                                                <div class="docente">
+                                                    {{ Str::limit($horarioEnRango->distributivoAcademico->docente->user->nombre_completo, 20) }}
+                                                </div>
+                                            @else
+                                                <div class="curso">
+                                                    {{ $horarioEnRango->distributivoAcademico->carrera->codigo }}-{{ $horarioEnRango->distributivoAcademico->semestre }}{{ $horarioEnRango->distributivoAcademico->paralelo }}
+                                                </div>
+                                            @endif
+
+                                            <div class="horario">
+                                                {{ $horarioEnRango->hora_inicio }} - {{ $horarioEnRango->hora_fin }}
+                                            </div>
+
+                                            @if($horarioEnRango->aula)
+                                                <div class="aula">
+                                                    📍 {{ $horarioEnRango->aula }}
+                                                </div>
+                                            @endif
+
+                                            <span class="tipo-clase">
+                                                {{ ucfirst($horarioEnRango->tipo_clase) }}
+                                            </span>
+                                        </div>
+                                    @endforeach
+                                @else
+                                    <div class="celda-libre">Libre</div>
+                                @endif
+                            </td>
+                        @endif
                     @endforeach
                 </tr>
             @endforeach

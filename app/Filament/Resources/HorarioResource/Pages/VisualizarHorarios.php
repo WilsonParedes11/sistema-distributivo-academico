@@ -332,7 +332,7 @@ class VisualizarHorarios extends Page
         $titulo = $this->obtenerTituloHorario($data);
         $subtitulo = $this->obtenerSubtituloHorario($data);
 
-        // Filtrar rangos horarios
+        // Filtrar rangos horarios incluyendo recesos
         $horasOcupadas = $this->horarios->map(function ($h) {
             return [
                 \Carbon\Carbon::parse($h->hora_inicio)->format('H:i'),
@@ -344,8 +344,8 @@ class VisualizarHorarios extends Page
         $maxHora = $horasOcupadas->max(fn($h) => $h[1]) ?? null;
 
         $rangosFiltrados = collect($horariosDisponibles)->filter(function ($rango) use ($minHora, $maxHora) {
-            if (!$minHora || !$maxHora)
-                return false;
+            if (!$minHora || !$maxHora) return true; // Mostrar todos si no hay horarios ocupados
+            if(str_starts_with($rango, 'RECESO:')) return true; // Siempre mostrar recesos
             [$inicio, $fin] = explode('-', $rango);
             return ($fin > $minHora && $inicio < $maxHora);
         });

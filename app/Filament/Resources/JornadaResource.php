@@ -21,7 +21,7 @@ class JornadaResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
 
-    protected static ?string $navigationGroup = 'Configuración Académica';
+    // protected static ?string $navigationGroup = 'Configuración Académica';
 
     protected static ?string $modelLabel = 'Jornada';
 
